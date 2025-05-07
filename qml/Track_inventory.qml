@@ -68,7 +68,7 @@ Item {
                         stockmodel.clear();
                         // Filter model by medicine name
                         if (searchField.text.trim() !== "") {
-                            var filteredStocks = dbManager.searchMedicine(searchField.text);
+                            var filteredStocks = dbManager.searchMedicineInventory(searchField.text);
 
                             stockmodel.clear();
                             for (var j = 0; j < filteredStocks.length; j++) {
@@ -122,7 +122,7 @@ Item {
                         stockmodel.clear();
                         // Filter model by supplier name
                         if (searchField1.text.trim() !== "") {
-                            var filteredStocks = dbManager.searchSupplier(searchField1.text);
+                            var filteredStocks = dbManager.searchSupplierInventory(searchField1.text);
 
                             stockmodel.clear();
                             for (var j = 0; j < filteredStocks.length; j++) {

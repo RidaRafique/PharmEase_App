@@ -37,1180 +37,1180 @@ DatabaseManager::~DatabaseManager() {
     }
 }
 
-// =============== SALES REPORT FUNCTIONS ======================
-
-// Function definition for getting total sales revenue
-double DatabaseManager::getTotalSales(){
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return 0.0;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("SELECT SUM(total_amount) FROM Sales");
-    if (query.exec() && query.next()) {
-        return query.value(0).toDouble();
-    }
-    return 0.0;
-}
-
-//Function to get most used payment method
-QString DatabaseManager::getMUPM(){
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return "database error!!";
-        }
-    }
-    QSqlQuery MUPM(db);
-    MUPM.prepare("SELECT payment_method, COUNT(payment_method) as count FROM Sales "
-                 "GROUP BY payment_method ORDER BY count DESC LIMIT 1");
-    if(MUPM.exec() && MUPM.next()){
-        return MUPM.value(0).toString();
-    }
-    else
-        return "UNKNOWN";
-}
-
-QPair<QString, double> DatabaseManager::getBestSellingItem(){
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return (QPair<QString, double> ("Database error", 0.0));
-        }
-    }
-    QSqlQuery bestSelling(db);
-    bestSelling.prepare("SELECT med_name , COUNT(med_name) as count FROM Sales "
-                        "GROUP BY med_name ORDER BY count DESC LIMIT 1");
-    if(bestSelling.exec() && bestSelling.next()){
-        return QPair <QString,double> (bestSelling.value(0).toString(), bestSelling.value(1).toDouble());
-    }
-    else
-        return QPair<QString,double>("UNKNOWN",0.0);
-}
-
-double DatabaseManager::getHighestSale(){
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return 0.0;
-        }
-    }
-    QSqlQuery HighestSale(db);
-    HighestSale.prepare("SELECT MAX(total_amount) FROM Sales");
-    if(HighestSale.exec() && HighestSale.next()){
-        return HighestSale.value(0).toDouble();
-    }
-    else
-        return 0.0;
-}
-
-int DatabaseManager::getTotalTransactions(){
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return 0;
-        }
-    }
-    QSqlQuery totalTransactions(db);
-    totalTransactions.prepare("SELECT COUNT(order_id) FROM Sales");
-    if (totalTransactions.exec() && totalTransactions.next()){
-        return totalTransactions.value(0).toInt();
-    }
-    else
-        return 0;
-
-}
-
-double DatabaseManager::getAverageSale(){
-    int total_sales = getTotalSales();
-    int total_transactions = getTotalTransactions();
-    return (total_transactions>0)? total_sales/total_transactions: 0.0;
-}
-
-QVector<QPair<QString,double>> DatabaseManager::getDailySales(){
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            QVector<QPair<QString, double>> errorData;
-            errorData.append(qMakePair(QString("Database error"), 0.0));
-            return errorData;
-        }
-    }
-    QVector<QPair<QString,double>> SalesData;
-    QSqlQuery data;
-    data.prepare("SELECT date, SUM(total_amount) FROM Sales GROUP BY date ORDER BY date");
-
-    if(data.exec()){
-        while(data.next()){
-            QString date = data.value(0).toString();
-            double sales = data.value(1).toDouble();
-            SalesData.append(qMakePair(date,sales));
-        }
-    }
-    return SalesData;
-}
-
-// Customer Operations
-int DatabaseManager::addCustomer( QString name, QString contact) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return 0;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("INSERT INTO Customers (name, contact_no) VALUES (?, ?)");
-    query.addBindValue(name);
-    query.addBindValue(contact);
-    if(!query.exec()){
-        qDebug() << "Failed to add customer:" << query.lastError().text();
-        return -1;
-    }
-    int inserted_id = query.lastInsertId().toInt();
-    return inserted_id;
-}
-
-
-// Order Operations
-int DatabaseManager::createOrder(QString customer_name) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return 0;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("INSERT INTO Orders (customer_name, order_date, order_status) VALUES (?, DATE('now'), 'Pending')");
-    query.addBindValue(customer_name);
-    if (query.exec()) {
-        return query.lastInsertId().toInt();
-    }
-    else
-        return -3;
-}
-
-bool DatabaseManager::addOrderDetails(int order_id, int medicine_id, int quantity, double price) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("INSERT INTO order_details (order_id, medicine_id, quantity, price) VALUES (?, ?, ?, ?)");
-    query.addBindValue(order_id);
-    query.addBindValue(medicine_id);
-    query.addBindValue(quantity);
-    query.addBindValue(price);
-    return query.exec();
-}
-
-bool DatabaseManager::finalizeOrder(int order_id) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("UPDATE Orders SET order_status = 'Completed' WHERE order_id = ?");
-    query.addBindValue(order_id);
-    return query.exec();
-}
-
-
-// For Discount
-bool DatabaseManager::addDiscount(const QString& medName, double percentage) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("INSERT INTO discount (applicable_medicine, discount_percentage) VALUES (?, ?)");
-    query.addBindValue(medName);
-    query.addBindValue(percentage);
-    return query.exec();
-}
-
-bool DatabaseManager::removeDiscount(int discountID) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("DELETE FROM discount WHERE discount_id = ?");
-    query.addBindValue(discountID);
-    return query.exec();
-}
-
-double DatabaseManager::getDiscount(const QString& medName) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return 0.0;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("SELECT discount_percentage FROM discount WHERE applicable_medicine = ?");
-    query.addBindValue(medName);
-    if (query.exec() && query.next()) {
-        return query.value(0).toDouble();
-    }
-    return 0.0;  // Return 0 if no discount found
-}
-
-
-// For Customer
-bool DatabaseManager::addCustomer(Customer* customer) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("INSERT INTO Customers (name, contact_no) VALUES (?, ?)");
-    query.addBindValue(customer->getName());
-    query.addBindValue(customer->getContactNo());
-
-    return query.exec();
-}
-
-bool DatabaseManager::updateCustomer(Customer* customer) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("UPDATE customer SET name = ?, contact_no = ? WHERE customer_id = ?");
-    query.addBindValue(customer->getName());
-    query.addBindValue(customer->getContactNo());
-    query.addBindValue(customer->getId());
-    return query.exec();
-}
-
-bool DatabaseManager::removeCustomer(int customerID) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("DELETE FROM customer WHERE customer_id = ?");
-    query.addBindValue(customerID);
-    return query.exec();
-}
-
-// For Supplier
-bool DatabaseManager::addSupplier(Supplier* supplier) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("INSERT INTO supplier (name, contact_no, medicine_supplied) VALUES (?, ?, ?)");
-    query.addBindValue(supplier->getName());
-    query.addBindValue(supplier->getContactNo());
-    query.addBindValue(supplier->getMedicineSupplied());
-    return query.exec();
-}
-
-bool DatabaseManager::updateSupplier(Supplier* supplier) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("UPDATE supplier SET name = ?, contact_no = ?, medicine_supplied = ? WHERE supplier_id = ?");
-    query.addBindValue(supplier->getName());
-    query.addBindValue(supplier->getContactNo());
-    query.addBindValue(supplier->getMedicineSupplied());
-    query.addBindValue(supplier->getSupplierID());
-    return query.exec();
-}
-
-bool DatabaseManager::removeSupplier(int supplierID) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("DELETE FROM supplier WHERE supplier_id = ?");
-    query.addBindValue(supplierID);
-    return query.exec();
-}
-
-
-//Add a new medicine to the database
-bool DatabaseManager::addMedicine(const QString &name, const QString &supplier, double price, int stock, const QString &expiry_date) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("INSERT INTO medicine (name, supplier, price, stock, expiry_date) VALUES (?, ?, ?, ?, ?)");
-    query.addBindValue(name);
-    query.addBindValue(supplier);
-    query.addBindValue(price);
-    query.addBindValue(stock);
-    query.addBindValue(expiry_date);
-
-    if (query.exec()) {
-        qDebug() << "Medicine added successfully!";
-        return true;
-    } else {
-        qDebug() << "Error adding medicine:" << query.lastError().text();
-        return false;
-    }
-}
-
-// Remove a medicine by its ID
-bool DatabaseManager::removeMeds(int medicineID) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("DELETE FROM medicine WHERE medicine_id = ?");
-    query.addBindValue(medicineID);
-
-    if (query.exec()) {
-        qDebug() << "Medicine removed successfully!";
-        return true;
-    } else {
-        qDebug() << "Error removing medicine:" << query.lastError().text();
-        return false;
-    }
-}
-
-// Check if a medicine exists by stock ID
-bool DatabaseManager::checkMedicineByStockID(int stockID) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("SELECT * FROM stock WHERE stock_id = ?");
-    query.addBindValue(stockID);
-    query.exec();
-
-    return query.next(); // Returns true if medicine exists
-}
-
-// Check if a medicine exists by medicine ID
-bool DatabaseManager::checkMedicineByMedicineID(int medicineID) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("SELECT * FROM medicine WHERE medicine_id = ?");
-    query.addBindValue(medicineID);
-    query.exec();
-
-    return query.next(); // Returns true if medicine exists
-}
-
-
-// ==================== STOCK FUNCTIONS ====================
-
-// Add stock to an existing medicine
-bool DatabaseManager::addStock(int medicineID, int quantity) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("INSERT INTO Stock (medicine_id, quantity, last_updation_date) VALUES (?, ?, ?)");
-    query.addBindValue(medicineID);
-    query.addBindValue(quantity);
-    query.addBindValue(QDate::currentDate().toString("yyyy-MM-dd"));
-
-    if (!query.exec()) {
-        qDebug() << "Failed to add stock:" << query.lastError().text();
-        return false;
-    }
-    return true;
-}
-
-// Remove expired medicines
-bool DatabaseManager::removeExpiredMeds() {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("DELETE FROM medicine WHERE expiry_date < DATE('now')");
-
-    if (query.exec()) {
-        qDebug() << "Expired medicines removed!";
-        return true;
-    } else {
-        qDebug() << "Error removing expired medicines:" << query.lastError().text();
-        return false;
-    }
-}
-
-// Display stock information
-void DatabaseManager::displayStockInfo() {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("SELECT * FROM stock");
-
-    while (query.next()) {
-        qDebug() << "Stock ID:" << query.value(0).toInt()
-        << "Medicine ID:" << query.value(1).toInt()
-        << "Quantity:" << query.value(2).toInt()
-        << "Last Updated:" << query.value(3).toString();
-    }
-}
-
-// Check if a medicine is in stock
-bool DatabaseManager::checkStock(int medicineID) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("SELECT quantity FROM stock WHERE medicine_id = ?");
-    query.addBindValue(medicineID);
-    query.exec();
-
-    if (query.next() && query.value(0).toInt() > 0) {
-        return true;
-    } else {
-        return false;
-    }
-}
-
-// ==================== ORDER FUNCTIONS ====================
-
-// Add an ordered medicine to order_details
-bool DatabaseManager::addOrder(int orderID, const QString& customerName, const QString& orderDate, const QString& status) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("INSERT INTO Orders (order_id, customer_name, order_date, order_status) VALUES (?, ?, ?, ?)");
-    query.addBindValue(orderID);
-    query.addBindValue(customerName);
-    query.addBindValue(orderDate);
-    query.addBindValue(status);
-    return query.exec();
-}
-
-bool DatabaseManager::addMedicineToOrder(int orderID, int medID, int quantity, double price) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("INSERT INTO OrderDetails (order_id, medicine_id, quantity, price) VALUES (?, ?, ?, ?)");
-    query.addBindValue(orderID);
-    query.addBindValue(medID);
-    query.addBindValue(quantity);
-    query.addBindValue(price);
-    return query.exec();
-}
-// Remove ordered medicines by order ID
-bool DatabaseManager::removeOrderedItem(int orderID) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("DELETE FROM OrderDetails WHERE order_id = ?");
-    query.addBindValue(orderID);
-
-    return query.exec();
-}
-
-
-void DatabaseManager::displayOrderInfo(int orderID) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("SELECT o.order_id, o.customer_name, o.order_date, o.order_status, "
-                  "od.medicine_id, od.quantity, od.price "
-                  "FROM Orders o "
-                  "JOIN OrderDetails od ON o.order_id = od.order_id "
-                  "WHERE o.order_id = ?");
-    query.addBindValue(orderID);
-    query.exec();
-    if (!query.exec()) {
-        qDebug() << "Failed to fetch order info:" << query.lastError().text();
-        return;
-    }
-    if (query.next()) {
-        qDebug() << "Order ID:" << query.value(0).toInt();
-        qDebug() << "Customer Name:" << query.value(1).toString();
-        qDebug() << "Order Date:" << query.value(2).toString();
-        qDebug() << "Order Status:" << query.value(3).toString();
-
-        do {
-            int medID = query.value(4).toInt();
-            int quantity = query.value(5).toInt();
-            double price = query.value(6).toDouble();
-
-            QString medName = getMedicineName(medID);
-            qDebug() << "Medicine Name:" << medName
-                     << ", Quantity:" << quantity
-                     << ", Price per Unit:" << price
-                     << ", Total Price:" << quantity * price;
-        } while (query.next());
-    } else {
-        qDebug() << "Order not found!";
-    }
-}
-
-
-// Get stock information using medicine ID
-bool DatabaseManager::checkStockByMedicineID(int medicineID) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("SELECT * FROM stock WHERE medicine_id = ?");
-    query.addBindValue(medicineID);
-    query.exec();
-
-    return query.next(); // Returns true if stock exists
-}
-
-// Get stock information using stock ID
-bool DatabaseManager::checkStockByStockID(int stockID) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("SELECT * FROM stock WHERE stock_id = ?");
-    query.addBindValue(stockID);
-    query.exec();
-
-    return query.next(); // Returns true if stock exists
-}
-
-// Get a list of medicines with low stock (below the given threshold)
-QList<int> DatabaseManager::getLowStockMedicines(int threshold) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return QList<int>();
-        }
-    }
-    QList<int> lowStockList;
-    QSqlQuery query(db);
-    query.prepare("SELECT medicine_id FROM stock WHERE quantity < ?");
-    query.addBindValue(threshold);
-    query.exec();
-
-    while (query.next()) {
-        lowStockList.append(query.value(0).toInt());
-    }
-    return lowStockList;
-}
-
-// Adds medicine to the order_details table
-bool DatabaseManager::addMeds(int orderID, int medID, int quantity, double price) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("INSERT INTO order_details (order_id, medicine_id, quantity, price) VALUES (:orderID, :medID, :quantity, :price)");
-    query.bindValue(":orderID", orderID);
-    query.bindValue(":medID", medID);
-    query.bindValue(":quantity", quantity);
-    query.bindValue(":price", price);
-
-    if (query.exec()) {
-        qDebug() << "Medicine added to order successfully!";
-        return true;
-    } else {
-        qDebug() << "Failed to add medicine to order: " << query.lastError().text();
-        return false;
-    }
-}
-
-
-QString DatabaseManager::getMedicineName(int medicineID) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return "DATABASE ERROR";
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("SELECT name FROM medicine WHERE medicine_id = ?");
-    query.addBindValue(medicineID);
-    query.exec();
-
-    if (query.next()) {
-        return query.value(0).toString();  // Return the medicine name
-    }
-
-    return "";  // If no medicine is found, return an empty string
-}
-
-
-bool DatabaseManager:: updateOrderStatus(int orderID, const QString& status){
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("UPDATE Orders SET order_status = ? WHERE order_id = ?");
-    query.addBindValue(status);
-    query.addBindValue(orderID);
-
-    if (query.exec()) {
-        return true;
-    } else {
-        qDebug() << "Error updating order status:" << query.lastError().text();
-        return false;
-    }
-}
-
-// Update stock quantity after the order is placed
-bool DatabaseManager::removeOrderedMeds(int medID, int quantity){
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("UPDATE stock SET quantity = quantity - ? WHERE medicine_id = ?");
-    query.addBindValue(quantity);
-    query.addBindValue(medID);
-
-    if (query.exec()) {
-        return true;
-    } else {
-        qDebug() << "Error updating stock:" << query.lastError().text();
-        return false;
-    }
-}
-
-int DatabaseManager::insertMedicine(const QString& name, const QString& supplier, double price, const QString& expiry_date) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("INSERT INTO Medicine (name, supplier, price, expiry_date) VALUES (?, ?, ?, ?)");
-    query.addBindValue(name);
-    query.addBindValue(supplier);
-    query.addBindValue(price);
-    query.addBindValue(expiry_date);
-
-    if (!query.exec()) {
-        qDebug() << "Failed to insert medicine:" << query.lastError().text();
-        return -1;
-    }
-
-    int inserted_id = query.lastInsertId().toInt();  // get the generated medicine_id
-    return inserted_id;
-}
-
-int DatabaseManager::getMedicineIDByName(QString medName) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return 0;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("SELECT medicine_id FROM Medicine WHERE name = ?");
-    query.addBindValue(medName);
-    if (query.exec() && query.next()) {
-        return query.value(0).toInt();
-    }
-    return -1; // not found
-}
-
-int DatabaseManager::getAvailableStock(int medicineID) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return 0;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("SELECT quantity FROM Stock WHERE medicine_id = ?");
-    query.addBindValue(medicineID);
-    if (query.exec() && query.next()) {
-        return query.value(0).toInt();
-    }
-    return 0;
-}
-
-double DatabaseManager::getPriceOfMedicine(int medicineID) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return 0.0;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("SELECT price FROM medicine WHERE medicine_id = ?");
-    query.addBindValue(medicineID);
-    if (query.exec() && query.next()) {
-        return query.value(0).toDouble();
-    }
-    return 0.0;
-}
-
-
-QString DatabaseManager:: getCustomerName(int customer_id){
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return "DATABASE ERROR";
-        }
-    }
-    QSqlQuery name(db);
-    name.prepare("SELECT name FROM Customer WHERE customer_id = ?");
-    name.addBindValue(customer_id);
-    if(name.exec() && name.next()){
-        return name.value(0).toString();
-    }
-    return "NOT FOUND";
-}
-
-
-int DatabaseManager::startOrder(QString customerName) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return 0;
-        }
-    }
-    QSqlQuery query(db);
-
-    query.prepare("INSERT INTO Orders (customer_name, order_date, order_status) VALUES (?, ?, ?)");
-    query.addBindValue(customerName);
-    query.addBindValue(QDate::currentDate().toString("yyyy-MM-dd"));
-    query.addBindValue("Pending");
-
-    if (!query.exec()) {
-        qDebug() << "Failed to start order becuase:" << query.lastError().text();
-        return -1;
-    }
-    return query.lastInsertId().toInt();
-}
-
-bool DatabaseManager::isStockAvailable(int medicineID, int requiredQty) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("SELECT quantity FROM Stock WHERE medicine_id = ?");
-    query.addBindValue(medicineID);
-    if (query.exec() && query.next()) {
-        int available = query.value(0).toInt();
-        return available >= requiredQty;
-    }
-    return false;
-}
-
-
-bool DatabaseManager::placeOrder(QString medicineName, int requiredQuantity) {
-    int medicineID = getMedicineIDByName(medicineName);
-
-    if (medicineID == -1) {
-        qDebug() << "Medicine not found:" << medicineName;
-        return false;
-    }
-
-    if (!isStockAvailable(medicineID, requiredQuantity)) {
-        qDebug() << "Not enough stock for medicine:" << medicineName << ". Available:" << getAvailableStock(medicineID);
-        return false;
-    }
-
-    double pricePerUnit = getPriceOfMedicine(medicineID);
-    if (pricePerUnit <= 0) {
-        qDebug() << "Invalid price for medicine:" << medicineName;
-        return false;
-    }
-
-    // Get the most recent order_id
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery orderQuery(db);
-    orderQuery.prepare("SELECT MAX(order_id) FROM Orders");
-    if (!orderQuery.exec() || !orderQuery.next()) {
-        qDebug() << "Failed to retrieve latest order ID.";
-        return false;
-    }
-
-    int orderID = orderQuery.value(0).toInt();
-    if (orderID <= 0) {
-        qDebug() << "No order found. Create an order before taking medicines.";
-        return false;
-    }
-
-    // Insert medicine directly into OrderDetails table
-    QSqlQuery insertQuery(db);
-    insertQuery.prepare("INSERT INTO OrderDetails (order_id, medicine_id, quantity, price) VALUES (?, ?, ?, ?)");
-
-    insertQuery.addBindValue(orderID);
-    insertQuery.addBindValue(medicineID);
-    insertQuery.addBindValue(requiredQuantity);
-    insertQuery.addBindValue(pricePerUnit);
-
-    if (!insertQuery.exec()) {
-        qDebug() << "Failed to add medicine to OrderDetails for order ID:" << orderID;
-        return false;
-    }
-
-    // Optionally update the stock
-    removeOrderedMeds(medicineID, requiredQuantity);
-
-    qDebug() << "Medicine" << medicineName << "added to Order ID" << orderID << "successfully.";
-    return true;
-    // Add medicine to order
-
-    qDebug() << "Medicine" << medicineName << "added to Order ID" << orderID << "successfully.";
-    return true;
-}
-
-bool DatabaseManager::confirmOrder(int orderID) {
-    // Check if the order exists and is valid
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery checkOrderQuery(db);
-    checkOrderQuery.prepare("SELECT COUNT(*) FROM OrderDetails WHERE order_id = ?");
-    checkOrderQuery.addBindValue(orderID);
-
-    if (!checkOrderQuery.exec() || !checkOrderQuery.next()) {
-        qDebug() << "Failed to check order details for order ID:" << orderID;
-        return false;
-    }
-
-    int itemCount = checkOrderQuery.value(0).toInt();
-    if (itemCount == 0) {
-        qDebug() << "No items in the order. Please add medicines before confirming the order.";
-        return false;
-    }
-
-    qDebug() << "Order ID" << orderID << "contains" << itemCount << "item(s). Order successfully confirmed. You can now proceed to billing.";
-    return true;
-}
-
-
-int DatabaseManager::displayReceipt(int orderID, double discountPercent) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("SELECT od.medicine_id, od.quantity, od.price, o.customer_name, o.order_date "
-                  "FROM OrderDetails od "
-                  "JOIN Orders o ON od.order_id = o.order_id "
-                  "WHERE od.order_id = ?");
-    query.addBindValue(orderID);
-
-    if (!query.exec()) {
-        qDebug() << "Failed to retrieve order details.";
-        return false;
-    }
-
-    QString customerName, orderDate;
-    double subtotal = 0.0;
-    bool headerPrinted = false;
-
-    while (query.next()) {
-        int medicineID = query.value(0).toInt();
-        int quantity = query.value(1).toInt();
-        double price = query.value(2).toDouble();
-        QString medicineName = getMedicineName(medicineID);
-        double total = price * quantity;
-
-        if (!headerPrinted) {
-            customerName = query.value(3).toString();
-            orderDate = query.value(4).toString();
-            qDebug() << "Customer:" << customerName;
-            qDebug() << "Date:" << orderDate;
-            qDebug() << "--------------------------";
-            headerPrinted = true;
-        }
-
-        subtotal += total;
-        qDebug() << medicineName << "\tRs." << price << "x" << quantity << "\t= Rs." << total;
-    }
-
-    if (subtotal == 0.0) {
-        qDebug() << "No items in the order.";
-        return false;
-    }
-
-    double discountAmount = (discountPercent / 100.0) * subtotal;
-    double totalPayable = subtotal - discountAmount;
-
-    qDebug() << "--------------------------";
-    qDebug() << "Subtotal:\tRs." << subtotal;
-    qDebug() << "Discount (" << discountPercent << "%):\t- Rs." << discountAmount;
-    qDebug() << "Total Payable:\tRs." << totalPayable;
-    qDebug() << "--------------------------";
-
-    return totalPayable;
-}
-
-
-double DatabaseManager::calculateSubtotal(int orderID) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return 0.0;
-        }
-    }
-    QSqlQuery query(db);
-    query.prepare("SELECT quantity, price FROM OrderDetails WHERE order_id = ?");
-    query.addBindValue(orderID);
-
-    double subtotal = 0;
-    if (query.exec()) {
-        while (query.next()) {
-            int quantity = query.value(0).toInt();
-            double price = query.value(1).toDouble();
-            subtotal += quantity * price;
-        }
-    }
-    return subtotal;
-}
-
-double DatabaseManager::applyDiscount(double subtotal, double discountPercentage) {
-    return subtotal - ((discountPercentage / 100.0) * subtotal);
-}
-
-
-bool DatabaseManager::finalizeSale(int orderID, const QString& paymentMethod, double totalAmount) {
-    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
-    if (!db.isOpen()) {
-        qDebug() << "Connection not open. Trying to reopen.";
-        if (!db.open()) {
-            qDebug() << "Reopen failed:" << db.lastError().text();
-            return false;
-        }
-    }
-    QSqlQuery insert(db);
-    insert.prepare("INSERT INTO Sales (order_id, med_name, payment_method, total_amount, date) "
-                   "VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)");
-
-    QStringList medNames;
-    QSqlQuery medQuery(db);
-    medQuery.prepare("SELECT medicine_id FROM OrderDetails WHERE order_id = ?");
-    medQuery.addBindValue(orderID);
-
-    if (medQuery.exec()) {
-        while (medQuery.next()) {
-            int medicineID = medQuery.value(0).toInt();
-            QString medName = getMedicineName(medicineID);  // Use your function to fetch the name
-            if (!medName.isEmpty()) {
-                medNames << medName;  // Add to list if a valid name is returned
-            }
-        }
-    }
-
-    QString combinedMedNames = medNames.join(", ");
-
-    insert.addBindValue(orderID);
-    insert.addBindValue(combinedMedNames);
-    insert.addBindValue(paymentMethod);
-    insert.addBindValue(totalAmount);
-
-    if (!insert.exec()) {
-        qDebug() << "Failed to insert into Sales:" << insert.lastError();
-        return false;
-    }
-
-    //Update the Orders table to mark the order as Completed
-    QSqlQuery updateOrder(db);
-    updateOrder.prepare("UPDATE Orders SET order_status = 'Completed' WHERE order_id = ?");
-    updateOrder.addBindValue(orderID);
-    if (!updateOrder.exec()) {
-        qDebug() << "Failed to update order status:" << updateOrder.lastError();
-        return false;
-    }
-
-    qDebug() << "Order ID" << orderID << "Successfully finalized in Sales and status updated to Completed!";
-    return true;
-}
+// // =============== SALES REPORT FUNCTIONS ======================
+
+// // Function definition for getting total sales revenue
+// double DatabaseManager::getTotalSales(){
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return 0.0;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("SELECT SUM(total_amount) FROM Sales");
+//     if (query.exec() && query.next()) {
+//         return query.value(0).toDouble();
+//     }
+//     return 0.0;
+// }
+
+// //Function to get most used payment method
+// QString DatabaseManager::getMUPM(){
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return "database error!!";
+//         }
+//     }
+//     QSqlQuery MUPM(db);
+//     MUPM.prepare("SELECT payment_method, COUNT(payment_method) as count FROM Sales "
+//                  "GROUP BY payment_method ORDER BY count DESC LIMIT 1");
+//     if(MUPM.exec() && MUPM.next()){
+//         return MUPM.value(0).toString();
+//     }
+//     else
+//         return "UNKNOWN";
+// }
+
+// QPair<QString, double> DatabaseManager::getBestSellingItem(){
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return (QPair<QString, double> ("Database error", 0.0));
+//         }
+//     }
+//     QSqlQuery bestSelling(db);
+//     bestSelling.prepare("SELECT med_name , COUNT(med_name) as count FROM Sales "
+//                         "GROUP BY med_name ORDER BY count DESC LIMIT 1");
+//     if(bestSelling.exec() && bestSelling.next()){
+//         return QPair <QString,double> (bestSelling.value(0).toString(), bestSelling.value(1).toDouble());
+//     }
+//     else
+//         return QPair<QString,double>("UNKNOWN",0.0);
+// }
+
+// double DatabaseManager::getHighestSale(){
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return 0.0;
+//         }
+//     }
+//     QSqlQuery HighestSale(db);
+//     HighestSale.prepare("SELECT MAX(total_amount) FROM Sales");
+//     if(HighestSale.exec() && HighestSale.next()){
+//         return HighestSale.value(0).toDouble();
+//     }
+//     else
+//         return 0.0;
+// }
+
+// int DatabaseManager::getTotalTransactions(){
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return 0;
+//         }
+//     }
+//     QSqlQuery totalTransactions(db);
+//     totalTransactions.prepare("SELECT COUNT(order_id) FROM Sales");
+//     if (totalTransactions.exec() && totalTransactions.next()){
+//         return totalTransactions.value(0).toInt();
+//     }
+//     else
+//         return 0;
+
+// }
+
+// double DatabaseManager::getAverageSale(){
+//     int total_sales = getTotalSales();
+//     int total_transactions = getTotalTransactions();
+//     return (total_transactions>0)? total_sales/total_transactions: 0.0;
+// }
+
+// QVector<QPair<QString,double>> DatabaseManager::getDailySales(){
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             QVector<QPair<QString, double>> errorData;
+//             errorData.append(qMakePair(QString("Database error"), 0.0));
+//             return errorData;
+//         }
+//     }
+//     QVector<QPair<QString,double>> SalesData;
+//     QSqlQuery data;
+//     data.prepare("SELECT date, SUM(total_amount) FROM Sales GROUP BY date ORDER BY date");
+
+//     if(data.exec()){
+//         while(data.next()){
+//             QString date = data.value(0).toString();
+//             double sales = data.value(1).toDouble();
+//             SalesData.append(qMakePair(date,sales));
+//         }
+//     }
+//     return SalesData;
+// }
+
+// // Customer Operations
+// int DatabaseManager::addCustomer( QString name, QString contact) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return 0;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("INSERT INTO Customers (name, contact_no) VALUES (?, ?)");
+//     query.addBindValue(name);
+//     query.addBindValue(contact);
+//     if(!query.exec()){
+//         qDebug() << "Failed to add customer:" << query.lastError().text();
+//         return -1;
+//     }
+//     int inserted_id = query.lastInsertId().toInt();
+//     return inserted_id;
+// }
+
+
+// // Order Operations
+// int DatabaseManager::createOrder(QString customer_name) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return 0;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("INSERT INTO Orders (customer_name, order_date, order_status) VALUES (?, DATE('now'), 'Pending')");
+//     query.addBindValue(customer_name);
+//     if (query.exec()) {
+//         return query.lastInsertId().toInt();
+//     }
+//     else
+//         return -3;
+// }
+
+// bool DatabaseManager::addOrderDetails(int order_id, int medicine_id, int quantity, double price) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("INSERT INTO order_details (order_id, medicine_id, quantity, price) VALUES (?, ?, ?, ?)");
+//     query.addBindValue(order_id);
+//     query.addBindValue(medicine_id);
+//     query.addBindValue(quantity);
+//     query.addBindValue(price);
+//     return query.exec();
+// }
+
+// bool DatabaseManager::finalizeOrder(int order_id) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("UPDATE Orders SET order_status = 'Completed' WHERE order_id = ?");
+//     query.addBindValue(order_id);
+//     return query.exec();
+// }
+
+
+// // For Discount
+// bool DatabaseManager::addDiscount(const QString& medName, double percentage) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("INSERT INTO discount (applicable_medicine, discount_percentage) VALUES (?, ?)");
+//     query.addBindValue(medName);
+//     query.addBindValue(percentage);
+//     return query.exec();
+// }
+
+// bool DatabaseManager::removeDiscount(int discountID) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("DELETE FROM discount WHERE discount_id = ?");
+//     query.addBindValue(discountID);
+//     return query.exec();
+// }
+
+// double DatabaseManager::getDiscount(const QString& medName) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return 0.0;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("SELECT discount_percentage FROM discount WHERE applicable_medicine = ?");
+//     query.addBindValue(medName);
+//     if (query.exec() && query.next()) {
+//         return query.value(0).toDouble();
+//     }
+//     return 0.0;  // Return 0 if no discount found
+// }
+
+
+// // For Customer
+// bool DatabaseManager::addCustomer(Customer* customer) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("INSERT INTO Customers (name, contact_no) VALUES (?, ?)");
+//     query.addBindValue(customer->getName());
+//     query.addBindValue(customer->getContactNo());
+
+//     return query.exec();
+// }
+
+// bool DatabaseManager::updateCustomer(Customer* customer) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("UPDATE customer SET name = ?, contact_no = ? WHERE customer_id = ?");
+//     query.addBindValue(customer->getName());
+//     query.addBindValue(customer->getContactNo());
+//     query.addBindValue(customer->getId());
+//     return query.exec();
+// }
+
+// bool DatabaseManager::removeCustomer(int customerID) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("DELETE FROM customer WHERE customer_id = ?");
+//     query.addBindValue(customerID);
+//     return query.exec();
+// }
+
+// // For Supplier
+// bool DatabaseManager::addSupplier(Supplier* supplier) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("INSERT INTO supplier (name, contact_no, medicine_supplied) VALUES (?, ?, ?)");
+//     query.addBindValue(supplier->getName());
+//     query.addBindValue(supplier->getContactNo());
+//     query.addBindValue(supplier->getMedicineSupplied());
+//     return query.exec();
+// }
+
+// bool DatabaseManager::updateSupplier(Supplier* supplier) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("UPDATE supplier SET name = ?, contact_no = ?, medicine_supplied = ? WHERE supplier_id = ?");
+//     query.addBindValue(supplier->getName());
+//     query.addBindValue(supplier->getContactNo());
+//     query.addBindValue(supplier->getMedicineSupplied());
+//     query.addBindValue(supplier->getSupplierID());
+//     return query.exec();
+// }
+
+// bool DatabaseManager::removeSupplier(int supplierID) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("DELETE FROM supplier WHERE supplier_id = ?");
+//     query.addBindValue(supplierID);
+//     return query.exec();
+// }
+
+
+// //Add a new medicine to the database
+// bool DatabaseManager::addMedicine(const QString &name, const QString &supplier, double price, int stock, const QString &expiry_date) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("INSERT INTO medicine (name, supplier, price, stock, expiry_date) VALUES (?, ?, ?, ?, ?)");
+//     query.addBindValue(name);
+//     query.addBindValue(supplier);
+//     query.addBindValue(price);
+//     query.addBindValue(stock);
+//     query.addBindValue(expiry_date);
+
+//     if (query.exec()) {
+//         qDebug() << "Medicine added successfully!";
+//         return true;
+//     } else {
+//         qDebug() << "Error adding medicine:" << query.lastError().text();
+//         return false;
+//     }
+// }
+
+// // Remove a medicine by its ID
+// bool DatabaseManager::removeMeds(int medicineID) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("DELETE FROM medicine WHERE medicine_id = ?");
+//     query.addBindValue(medicineID);
+
+//     if (query.exec()) {
+//         qDebug() << "Medicine removed successfully!";
+//         return true;
+//     } else {
+//         qDebug() << "Error removing medicine:" << query.lastError().text();
+//         return false;
+//     }
+// }
+
+// // Check if a medicine exists by stock ID
+// bool DatabaseManager::checkMedicineByStockID(int stockID) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("SELECT * FROM stock WHERE stock_id = ?");
+//     query.addBindValue(stockID);
+//     query.exec();
+
+//     return query.next(); // Returns true if medicine exists
+// }
+
+// // Check if a medicine exists by medicine ID
+// bool DatabaseManager::checkMedicineByMedicineID(int medicineID) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("SELECT * FROM medicine WHERE medicine_id = ?");
+//     query.addBindValue(medicineID);
+//     query.exec();
+
+//     return query.next(); // Returns true if medicine exists
+// }
+
+
+// // ==================== STOCK FUNCTIONS ====================
+
+// // Add stock to an existing medicine
+// bool DatabaseManager::addStock(int medicineID, int quantity) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("INSERT INTO Stock (medicine_id, quantity, last_updation_date) VALUES (?, ?, ?)");
+//     query.addBindValue(medicineID);
+//     query.addBindValue(quantity);
+//     query.addBindValue(QDate::currentDate().toString("yyyy-MM-dd"));
+
+//     if (!query.exec()) {
+//         qDebug() << "Failed to add stock:" << query.lastError().text();
+//         return false;
+//     }
+//     return true;
+// }
+
+// // Remove expired medicines
+// bool DatabaseManager::removeExpiredMeds() {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("DELETE FROM medicine WHERE expiry_date < DATE('now')");
+
+//     if (query.exec()) {
+//         qDebug() << "Expired medicines removed!";
+//         return true;
+//     } else {
+//         qDebug() << "Error removing expired medicines:" << query.lastError().text();
+//         return false;
+//     }
+// }
+
+// // Display stock information
+// void DatabaseManager::displayStockInfo() {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("SELECT * FROM stock");
+
+//     while (query.next()) {
+//         qDebug() << "Stock ID:" << query.value(0).toInt()
+//         << "Medicine ID:" << query.value(1).toInt()
+//         << "Quantity:" << query.value(2).toInt()
+//         << "Last Updated:" << query.value(3).toString();
+//     }
+// }
+
+// // Check if a medicine is in stock
+// bool DatabaseManager::checkStock(int medicineID) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("SELECT quantity FROM stock WHERE medicine_id = ?");
+//     query.addBindValue(medicineID);
+//     query.exec();
+
+//     if (query.next() && query.value(0).toInt() > 0) {
+//         return true;
+//     } else {
+//         return false;
+//     }
+// }
+
+// // ==================== ORDER FUNCTIONS ====================
+
+// // Add an ordered medicine to order_details
+// bool DatabaseManager::addOrder(int orderID, const QString& customerName, const QString& orderDate, const QString& status) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("INSERT INTO Orders (order_id, customer_name, order_date, order_status) VALUES (?, ?, ?, ?)");
+//     query.addBindValue(orderID);
+//     query.addBindValue(customerName);
+//     query.addBindValue(orderDate);
+//     query.addBindValue(status);
+//     return query.exec();
+// }
+
+// bool DatabaseManager::addMedicineToOrder(int orderID, int medID, int quantity, double price) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("INSERT INTO OrderDetails (order_id, medicine_id, quantity, price) VALUES (?, ?, ?, ?)");
+//     query.addBindValue(orderID);
+//     query.addBindValue(medID);
+//     query.addBindValue(quantity);
+//     query.addBindValue(price);
+//     return query.exec();
+// }
+// // Remove ordered medicines by order ID
+// bool DatabaseManager::removeOrderedItem(int orderID) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("DELETE FROM OrderDetails WHERE order_id = ?");
+//     query.addBindValue(orderID);
+
+//     return query.exec();
+// }
+
+
+// void DatabaseManager::displayOrderInfo(int orderID) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("SELECT o.order_id, o.customer_name, o.order_date, o.order_status, "
+//                   "od.medicine_id, od.quantity, od.price "
+//                   "FROM Orders o "
+//                   "JOIN OrderDetails od ON o.order_id = od.order_id "
+//                   "WHERE o.order_id = ?");
+//     query.addBindValue(orderID);
+//     query.exec();
+//     if (!query.exec()) {
+//         qDebug() << "Failed to fetch order info:" << query.lastError().text();
+//         return;
+//     }
+//     if (query.next()) {
+//         qDebug() << "Order ID:" << query.value(0).toInt();
+//         qDebug() << "Customer Name:" << query.value(1).toString();
+//         qDebug() << "Order Date:" << query.value(2).toString();
+//         qDebug() << "Order Status:" << query.value(3).toString();
+
+//         do {
+//             int medID = query.value(4).toInt();
+//             int quantity = query.value(5).toInt();
+//             double price = query.value(6).toDouble();
+
+//             QString medName = getMedicineName(medID);
+//             qDebug() << "Medicine Name:" << medName
+//                      << ", Quantity:" << quantity
+//                      << ", Price per Unit:" << price
+//                      << ", Total Price:" << quantity * price;
+//         } while (query.next());
+//     } else {
+//         qDebug() << "Order not found!";
+//     }
+// }
+
+
+// // Get stock information using medicine ID
+// bool DatabaseManager::checkStockByMedicineID(int medicineID) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("SELECT * FROM stock WHERE medicine_id = ?");
+//     query.addBindValue(medicineID);
+//     query.exec();
+
+//     return query.next(); // Returns true if stock exists
+// }
+
+// // Get stock information using stock ID
+// bool DatabaseManager::checkStockByStockID(int stockID) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("SELECT * FROM stock WHERE stock_id = ?");
+//     query.addBindValue(stockID);
+//     query.exec();
+
+//     return query.next(); // Returns true if stock exists
+// }
+
+// // Get a list of medicines with low stock (below the given threshold)
+// QList<int> DatabaseManager::getLowStockMedicines(int threshold) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return QList<int>();
+//         }
+//     }
+//     QList<int> lowStockList;
+//     QSqlQuery query(db);
+//     query.prepare("SELECT medicine_id FROM stock WHERE quantity < ?");
+//     query.addBindValue(threshold);
+//     query.exec();
+
+//     while (query.next()) {
+//         lowStockList.append(query.value(0).toInt());
+//     }
+//     return lowStockList;
+// }
+
+// // Adds medicine to the order_details table
+// bool DatabaseManager::addMeds(int orderID, int medID, int quantity, double price) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("INSERT INTO order_details (order_id, medicine_id, quantity, price) VALUES (:orderID, :medID, :quantity, :price)");
+//     query.bindValue(":orderID", orderID);
+//     query.bindValue(":medID", medID);
+//     query.bindValue(":quantity", quantity);
+//     query.bindValue(":price", price);
+
+//     if (query.exec()) {
+//         qDebug() << "Medicine added to order successfully!";
+//         return true;
+//     } else {
+//         qDebug() << "Failed to add medicine to order: " << query.lastError().text();
+//         return false;
+//     }
+// }
+
+
+// QString DatabaseManager::getMedicineName(int medicineID) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return "DATABASE ERROR";
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("SELECT name FROM medicine WHERE medicine_id = ?");
+//     query.addBindValue(medicineID);
+//     query.exec();
+
+//     if (query.next()) {
+//         return query.value(0).toString();  // Return the medicine name
+//     }
+
+//     return "";  // If no medicine is found, return an empty string
+// }
+
+
+// bool DatabaseManager:: updateOrderStatus(int orderID, const QString& status){
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("UPDATE Orders SET order_status = ? WHERE order_id = ?");
+//     query.addBindValue(status);
+//     query.addBindValue(orderID);
+
+//     if (query.exec()) {
+//         return true;
+//     } else {
+//         qDebug() << "Error updating order status:" << query.lastError().text();
+//         return false;
+//     }
+// }
+
+// // Update stock quantity after the order is placed
+// bool DatabaseManager::removeOrderedMeds(int medID, int quantity){
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("UPDATE stock SET quantity = quantity - ? WHERE medicine_id = ?");
+//     query.addBindValue(quantity);
+//     query.addBindValue(medID);
+
+//     if (query.exec()) {
+//         return true;
+//     } else {
+//         qDebug() << "Error updating stock:" << query.lastError().text();
+//         return false;
+//     }
+// }
+
+// int DatabaseManager::insertMedicine(const QString& name, const QString& supplier, double price, const QString& expiry_date) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("INSERT INTO Medicine (name, supplier, price, expiry_date) VALUES (?, ?, ?, ?)");
+//     query.addBindValue(name);
+//     query.addBindValue(supplier);
+//     query.addBindValue(price);
+//     query.addBindValue(expiry_date);
+
+//     if (!query.exec()) {
+//         qDebug() << "Failed to insert medicine:" << query.lastError().text();
+//         return -1;
+//     }
+
+//     int inserted_id = query.lastInsertId().toInt();  // get the generated medicine_id
+//     return inserted_id;
+// }
+
+// int DatabaseManager::getMedicineIDByName(QString medName) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return 0;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("SELECT medicine_id FROM Medicine WHERE name = ?");
+//     query.addBindValue(medName);
+//     if (query.exec() && query.next()) {
+//         return query.value(0).toInt();
+//     }
+//     return -1; // not found
+// }
+
+// int DatabaseManager::getAvailableStock(int medicineID) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return 0;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("SELECT quantity FROM Stock WHERE medicine_id = ?");
+//     query.addBindValue(medicineID);
+//     if (query.exec() && query.next()) {
+//         return query.value(0).toInt();
+//     }
+//     return 0;
+// }
+
+// double DatabaseManager::getPriceOfMedicine(int medicineID) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return 0.0;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("SELECT price FROM medicine WHERE medicine_id = ?");
+//     query.addBindValue(medicineID);
+//     if (query.exec() && query.next()) {
+//         return query.value(0).toDouble();
+//     }
+//     return 0.0;
+// }
+
+
+// QString DatabaseManager:: getCustomerName(int customer_id){
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return "DATABASE ERROR";
+//         }
+//     }
+//     QSqlQuery name(db);
+//     name.prepare("SELECT name FROM Customer WHERE customer_id = ?");
+//     name.addBindValue(customer_id);
+//     if(name.exec() && name.next()){
+//         return name.value(0).toString();
+//     }
+//     return "NOT FOUND";
+// }
+
+
+// int DatabaseManager::startOrder(QString customerName) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return 0;
+//         }
+//     }
+//     QSqlQuery query(db);
+
+//     query.prepare("INSERT INTO Orders (customer_name, order_date, order_status) VALUES (?, ?, ?)");
+//     query.addBindValue(customerName);
+//     query.addBindValue(QDate::currentDate().toString("yyyy-MM-dd"));
+//     query.addBindValue("Pending");
+
+//     if (!query.exec()) {
+//         qDebug() << "Failed to start order becuase:" << query.lastError().text();
+//         return -1;
+//     }
+//     return query.lastInsertId().toInt();
+// }
+
+// bool DatabaseManager::isStockAvailable(int medicineID, int requiredQty) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("SELECT quantity FROM Stock WHERE medicine_id = ?");
+//     query.addBindValue(medicineID);
+//     if (query.exec() && query.next()) {
+//         int available = query.value(0).toInt();
+//         return available >= requiredQty;
+//     }
+//     return false;
+// }
+
+
+// bool DatabaseManager::placeOrder(QString medicineName, int requiredQuantity) {
+//     int medicineID = getMedicineIDByName(medicineName);
+
+//     if (medicineID == -1) {
+//         qDebug() << "Medicine not found:" << medicineName;
+//         return false;
+//     }
+
+//     if (!isStockAvailable(medicineID, requiredQuantity)) {
+//         qDebug() << "Not enough stock for medicine:" << medicineName << ". Available:" << getAvailableStock(medicineID);
+//         return false;
+//     }
+
+//     double pricePerUnit = getPriceOfMedicine(medicineID);
+//     if (pricePerUnit <= 0) {
+//         qDebug() << "Invalid price for medicine:" << medicineName;
+//         return false;
+//     }
+
+//     // Get the most recent order_id
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery orderQuery(db);
+//     orderQuery.prepare("SELECT MAX(order_id) FROM Orders");
+//     if (!orderQuery.exec() || !orderQuery.next()) {
+//         qDebug() << "Failed to retrieve latest order ID.";
+//         return false;
+//     }
+
+//     int orderID = orderQuery.value(0).toInt();
+//     if (orderID <= 0) {
+//         qDebug() << "No order found. Create an order before taking medicines.";
+//         return false;
+//     }
+
+//     // Insert medicine directly into OrderDetails table
+//     QSqlQuery insertQuery(db);
+//     insertQuery.prepare("INSERT INTO OrderDetails (order_id, medicine_id, quantity, price) VALUES (?, ?, ?, ?)");
+
+//     insertQuery.addBindValue(orderID);
+//     insertQuery.addBindValue(medicineID);
+//     insertQuery.addBindValue(requiredQuantity);
+//     insertQuery.addBindValue(pricePerUnit);
+
+//     if (!insertQuery.exec()) {
+//         qDebug() << "Failed to add medicine to OrderDetails for order ID:" << orderID;
+//         return false;
+//     }
+
+//     // Optionally update the stock
+//     removeOrderedMeds(medicineID, requiredQuantity);
+
+//     qDebug() << "Medicine" << medicineName << "added to Order ID" << orderID << "successfully.";
+//     return true;
+//     // Add medicine to order
+
+//     qDebug() << "Medicine" << medicineName << "added to Order ID" << orderID << "successfully.";
+//     return true;
+// }
+
+// bool DatabaseManager::confirmOrder(int orderID) {
+//     // Check if the order exists and is valid
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery checkOrderQuery(db);
+//     checkOrderQuery.prepare("SELECT COUNT(*) FROM OrderDetails WHERE order_id = ?");
+//     checkOrderQuery.addBindValue(orderID);
+
+//     if (!checkOrderQuery.exec() || !checkOrderQuery.next()) {
+//         qDebug() << "Failed to check order details for order ID:" << orderID;
+//         return false;
+//     }
+
+//     int itemCount = checkOrderQuery.value(0).toInt();
+//     if (itemCount == 0) {
+//         qDebug() << "No items in the order. Please add medicines before confirming the order.";
+//         return false;
+//     }
+
+//     qDebug() << "Order ID" << orderID << "contains" << itemCount << "item(s). Order successfully confirmed. You can now proceed to billing.";
+//     return true;
+// }
+
+
+// int DatabaseManager::displayReceipt(int orderID, double discountPercent) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("SELECT od.medicine_id, od.quantity, od.price, o.customer_name, o.order_date "
+//                   "FROM OrderDetails od "
+//                   "JOIN Orders o ON od.order_id = o.order_id "
+//                   "WHERE od.order_id = ?");
+//     query.addBindValue(orderID);
+
+//     if (!query.exec()) {
+//         qDebug() << "Failed to retrieve order details.";
+//         return false;
+//     }
+
+//     QString customerName, orderDate;
+//     double subtotal = 0.0;
+//     bool headerPrinted = false;
+
+//     while (query.next()) {
+//         int medicineID = query.value(0).toInt();
+//         int quantity = query.value(1).toInt();
+//         double price = query.value(2).toDouble();
+//         QString medicineName = getMedicineName(medicineID);
+//         double total = price * quantity;
+
+//         if (!headerPrinted) {
+//             customerName = query.value(3).toString();
+//             orderDate = query.value(4).toString();
+//             qDebug() << "Customer:" << customerName;
+//             qDebug() << "Date:" << orderDate;
+//             qDebug() << "--------------------------";
+//             headerPrinted = true;
+//         }
+
+//         subtotal += total;
+//         qDebug() << medicineName << "\tRs." << price << "x" << quantity << "\t= Rs." << total;
+//     }
+
+//     if (subtotal == 0.0) {
+//         qDebug() << "No items in the order.";
+//         return false;
+//     }
+
+//     double discountAmount = (discountPercent / 100.0) * subtotal;
+//     double totalPayable = subtotal - discountAmount;
+
+//     qDebug() << "--------------------------";
+//     qDebug() << "Subtotal:\tRs." << subtotal;
+//     qDebug() << "Discount (" << discountPercent << "%):\t- Rs." << discountAmount;
+//     qDebug() << "Total Payable:\tRs." << totalPayable;
+//     qDebug() << "--------------------------";
+
+//     return totalPayable;
+// }
+
+
+// double DatabaseManager::calculateSubtotal(int orderID) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return 0.0;
+//         }
+//     }
+//     QSqlQuery query(db);
+//     query.prepare("SELECT quantity, price FROM OrderDetails WHERE order_id = ?");
+//     query.addBindValue(orderID);
+
+//     double subtotal = 0;
+//     if (query.exec()) {
+//         while (query.next()) {
+//             int quantity = query.value(0).toInt();
+//             double price = query.value(1).toDouble();
+//             subtotal += quantity * price;
+//         }
+//     }
+//     return subtotal;
+// }
+
+// double DatabaseManager::applyDiscount(double subtotal, double discountPercentage) {
+//     return subtotal - ((discountPercentage / 100.0) * subtotal);
+// }
+
+
+// bool DatabaseManager::finalizeSale(int orderID, const QString& paymentMethod, double totalAmount) {
+//     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+//     if (!db.isOpen()) {
+//         qDebug() << "Connection not open. Trying to reopen.";
+//         if (!db.open()) {
+//             qDebug() << "Reopen failed:" << db.lastError().text();
+//             return false;
+//         }
+//     }
+//     QSqlQuery insert(db);
+//     insert.prepare("INSERT INTO Sales (order_id, med_name, payment_method, total_amount, date) "
+//                    "VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)");
+
+//     QStringList medNames;
+//     QSqlQuery medQuery(db);
+//     medQuery.prepare("SELECT medicine_id FROM OrderDetails WHERE order_id = ?");
+//     medQuery.addBindValue(orderID);
+
+//     if (medQuery.exec()) {
+//         while (medQuery.next()) {
+//             int medicineID = medQuery.value(0).toInt();
+//             QString medName = getMedicineName(medicineID);  // Use your function to fetch the name
+//             if (!medName.isEmpty()) {
+//                 medNames << medName;  // Add to list if a valid name is returned
+//             }
+//         }
+//     }
+
+//     QString combinedMedNames = medNames.join(", ");
+
+//     insert.addBindValue(orderID);
+//     insert.addBindValue(combinedMedNames);
+//     insert.addBindValue(paymentMethod);
+//     insert.addBindValue(totalAmount);
+
+//     if (!insert.exec()) {
+//         qDebug() << "Failed to insert into Sales:" << insert.lastError();
+//         return false;
+//     }
+
+//     //Update the Orders table to mark the order as Completed
+//     QSqlQuery updateOrder(db);
+//     updateOrder.prepare("UPDATE Orders SET order_status = 'Completed' WHERE order_id = ?");
+//     updateOrder.addBindValue(orderID);
+//     if (!updateOrder.exec()) {
+//         qDebug() << "Failed to update order status:" << updateOrder.lastError();
+//         return false;
+//     }
+
+//     qDebug() << "Order ID" << orderID << "Successfully finalized in Sales and status updated to Completed!";
+//     return true;
+// }
 
 
 bool DatabaseManager::verifyEmployeeLogin(const QString& username, const QString& password) {
@@ -1302,8 +1302,7 @@ QVariantList DatabaseManager::getAllEmployeesList() {
     return employeeList;
 }
 
-bool DatabaseManager::addEmployee(const QString &name, const QString &role,
-                                  const QString &salary, const QString &contact) {
+bool DatabaseManager::addEmployee(const QString &name, const QString &role, const QString &salary, const QString &contact) {
     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
     if (!db.isOpen()) {
         qDebug() << "addEmployee: Database not open. Trying to reopen.";
@@ -1329,9 +1328,7 @@ bool DatabaseManager::addEmployee(const QString &name, const QString &role,
     }
 }
 
-bool DatabaseManager::updateEmployee(const int employeeId, const QString &name,
-                                     const QString &role, const QString &salary,
-                                     const QString &contact) {
+bool DatabaseManager::updateEmployee(const int employeeId, const QString &name, const QString &role, const QString &salary, const QString &contact) {
     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
     if (!db.isOpen()) {
         qDebug() << "updateEmployee: Database not open. Trying to reopen.";
@@ -1491,6 +1488,81 @@ QVariantList DatabaseManager::searchSupplier(const QString &searchText)
     return stockList;
 }
 
+QVariantList DatabaseManager::searchMedicineInventory(const QString &searchText)
+{
+    QVariantList stockList;
+    if (!db.isOpen()) {
+        qDebug() << "Connection not open. Trying to reopen.";
+        if (!db.open()) {
+            qDebug() << "Reopen failed:" << db.lastError().text();
+            return stockList;
+        }
+    }
+
+    QSqlQuery query(db);
+    // Using LIKE for partial matching
+    query.prepare("SELECT medicine_id, name, supplier, price, expiry_date, quantity, contact_no FROM Stock_info "
+                  "WHERE name LIKE ?");
+    query.addBindValue("%" + searchText + "%");
+
+    if (!query.exec()) {
+        qDebug() << "Error searching medicines:" << query.lastError().text();
+        return stockList;
+    }
+
+    while (query.next()) {
+        QVariantMap stockItem;
+        stockItem["medicine_id"] = query.value(0).toInt();
+        stockItem["name"] = query.value(1).toString();
+        stockItem["supplier"] = query.value(2).toString();
+        stockItem["price"] = query.value(3).toDouble();
+        stockItem["expiry_date"] = query.value(4).toString();
+        stockItem["quantity"] = query.value(5).toInt();
+        stockItem["contact_no"] = query.value(6).toString();
+        stockItem["isEditable"] = false;
+        stockList.append(stockItem);
+    }
+
+    return stockList;
+}
+
+QVariantList DatabaseManager::searchSupplierInventory(const QString &searchText)
+{
+    QVariantList stockList;
+    if (!db.isOpen()) {
+        qDebug() << "Connection not open. Trying to reopen.";
+        if (!db.open()) {
+            qDebug() << "Reopen failed:" << db.lastError().text();
+            return stockList;
+        }
+    }
+
+    QSqlQuery query(db);
+    query.prepare("SELECT medicine_id, name, supplier, price, expiry_date, quantity, contact_no FROM Stock_info "
+                  "WHERE supplier LIKE ?");
+    query.addBindValue("%" + searchText + "%");
+
+    if (!query.exec()) {
+        qDebug() << "Error searching suppliers:" << query.lastError().text();
+        return stockList;
+    }
+
+    while (query.next()) {
+        QVariantMap stockItem;
+        stockItem["medicine_id"] = query.value(0).toInt();
+        stockItem["name"] = query.value(1).toString();
+        stockItem["supplier"] = query.value(2).toString();
+        stockItem["price"] = query.value(3).toDouble();
+        stockItem["expiry_date"] = query.value(4).toString();
+        stockItem["quantity"] = query.value(5).toInt();
+        stockItem["contact_no"] = query.value(6).toString();
+        stockItem["isEditable"] = false;
+        stockList.append(stockItem);
+    }
+
+    return stockList;
+}
+
 bool DatabaseManager::addStockInfo( const QString &name, const QString &supplier, double price, const QString &expiry_date, int quantity)
 {
     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
@@ -1579,92 +1651,6 @@ bool DatabaseManager::deleteStock(int medicineId)
 
     return success;
 }
-
-// // Add these functions to your DatabaseManager class
-
-// QVariantList DatabaseManager::getOrderSummary()
-// {
-//     QVariantList ordersSummary;
-
-//     // Join Orders, OrderDetails, and Stock_info tables to get order summary
-//     QSqlQuery query;
-//     query.prepare(
-//         "SELECT o.order_id, o.customer_name, o.order_date, o.order_status, o.payment_method, "
-//         "GROUP_CONCAT(si.name, ', ') as medicines, "
-//         "SUM(od.quantity) as total_quantity, "
-//         "SUM(od.price * od.quantity) as total_amount "
-//         "FROM Orders o "
-//         "JOIN OrderDetails od ON o.order_id = od.order_id "
-//         "JOIN Stock_info si ON od.medicine_id = si.medicine_id "
-//         "GROUP BY o.order_id "
-//         "ORDER BY o.order_id DESC"
-//         );
-
-//     if (query.exec()) {
-//         while (query.next()) {
-//             QVariantMap orderData;
-//             orderData["orderID"] = query.value("order_id").toString();
-//             orderData["customerName"] = query.value("customer_name").toString();
-//             orderData["medicines"] = query.value("medicines").toString();
-//             orderData["totalQuantity"] = query.value("total_quantity").toString();
-//             orderData["paymentMethod"] = query.value("payment_method").toString();
-//             orderData["totalAmount"] = query.value("total_amount").toString();
-//             orderData["orderStatus"] = query.value("order_status").toString();
-//             orderData["date"] = query.value("order_date").toString();
-
-//             ordersSummary.append(orderData);
-//         }
-//     } else {
-//         qDebug() << "Error fetching order summary:" << query.lastError().text();
-//     }
-
-//     return ordersSummary;
-// }
-
-// QVariantList DatabaseManager::getOrdersList()
-// {
-//     QVariantList ordersDetailList;
-
-//     // Join Orders, OrderDetails, and Stock_info tables to get detailed order information
-//     QSqlQuery query;
-//     query.prepare(
-//         "SELECT od.ordered_item_id, od.order_id, o.customer_name, o.order_date, "
-//         "od.medicine_id, si.name as medicine_name, od.quantity, od.price, "
-//         "o.payment_method "
-//         "FROM OrderDetails od "
-//         "JOIN Orders o ON od.order_id = o.order_id "
-//         "JOIN Stock_info si ON od.medicine_id = si.medicine_id "
-//         "ORDER BY od.order_id DESC, od.ordered_item_id"
-//         );
-
-//     if (query.exec()) {
-//         while (query.next()) {
-//             QVariantMap orderData;
-//             orderData["itemID"] = query.value("ordered_item_id").toString();
-//             orderData["orderID"] = query.value("order_id").toString();
-//             orderData["medicineID"] = query.value("medicine_id").toString();
-//             orderData["medicineName"] = query.value("medicine_name").toString();
-//             orderData["customerName"] = query.value("customer_name").toString();
-//             orderData["quantity"] = query.value("quantity").toString();
-//             orderData["price"] = query.value("price").toString();
-//             orderData["paymentMethod"] = query.value("payment_method").toString();
-//             orderData["date"] = query.value("order_date").toString();
-
-//             ordersDetailList.append(orderData);
-//         }
-//     } else {
-//         qDebug() << "Error fetching orders details:" << query.lastError().text();
-//     }
-
-//     return ordersDetailList;
-// }
-
-// void DatabaseManager::fetchOrdersData()
-// {
-//     // This function will emit the signal with the detailed orders data
-//     QVariantList detailedOrders = getOrdersList();
-//     emit ordersDataChanged(detailedOrders);
-// }
 
 // Fixed version of the getInventory function
 QVariantList DatabaseManager::getInventory()
@@ -1901,6 +1887,389 @@ QVariantList DatabaseManager::filterOrdersByPaymentMethod(const QString &payment
     }
 
     return ordersList;
+}
+
+// Get all medicines from Stock_info table
+QVariantList DatabaseManager::getAllMedicines() {
+    QVariantList medicines;
+
+    if (!db.isOpen()) {
+        qDebug() << "Connection not open. Trying to reopen.";
+        if (!db.open()) {
+            qDebug() << "Reopen failed:" << db.lastError().text();
+            return medicines;
+        }
+    }
+
+    QSqlQuery query(db);
+    query.prepare("SELECT medicine_id, name, price, quantity FROM Stock_info");
+
+    bool success = query.exec();
+    if (!success) {
+        qDebug() << "Error getting medicines:" << query.lastError().text();
+        return medicines;
+    }
+
+    while (query.next()) {
+        QVariantMap medicine;
+        medicine["medID"] = query.value("medicine_id").toInt();
+        medicine["name"] = query.value("name").toString();
+        medicine["price"] = query.value("price").toInt();
+        medicine["quantity"] = query.value("quantity").toInt();
+        medicines.append(medicine);
+    }
+
+    qDebug() << "Retrieved" << medicines.size() << "medicines";
+    return medicines;
+}
+
+// Search medicines by name
+QVariantList DatabaseManager::searchMedicines(const QString &searchText) {
+    QVariantList medicines;
+
+    if (!db.isOpen()) {
+        qDebug() << "Connection not open. Trying to reopen.";
+        if (!db.open()) {
+            qDebug() << "Reopen failed:" << db.lastError().text();
+            return medicines;
+        }
+    }
+
+    QSqlQuery query(db);
+    query.prepare("SELECT medicine_id, name, price, quantity FROM Stock_info "
+                  "WHERE name LIKE ?");
+    query.addBindValue("%" + searchText + "%");
+
+    bool success = query.exec();
+    if (!success) {
+        qDebug() << "Error searching medicines:" << query.lastError().text();
+        return medicines;
+    }
+
+    while (query.next()) {
+        QVariantMap medicine;
+        medicine["medID"] = query.value("medicine_id").toInt();
+        medicine["name"] = query.value("name").toString();
+        medicine["price"] = query.value("price").toInt();
+        medicine["quantity"] = query.value("quantity").toInt();
+        medicines.append(medicine);
+    }
+
+    qDebug() << "Found" << medicines.size() << "medicines matching" << searchText;
+    return medicines;
+}
+
+// Update medicine quantity (used when placing orders)
+bool DatabaseManager::updateMedicineQuantity(int medicineId, int newQuantity) {
+    if (!db.isOpen()) {
+        qDebug() << "Connection not open. Trying to reopen.";
+        if (!db.open()) {
+            qDebug() << "Reopen failed:" << db.lastError().text();
+            return false;
+        }
+    }
+
+    QSqlQuery query(db);
+    query.prepare("UPDATE Stock_info SET quantity = ? WHERE medicine_id = ?");
+    query.addBindValue(newQuantity);
+    query.addBindValue(medicineId);
+
+    bool success = query.exec();
+    if (!success) {
+        qDebug() << "Error updating medicine quantity:" << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "Updated quantity for medicine ID" << medicineId << "to" << newQuantity;
+    return true;
+}
+
+// Get all customers
+QVariantList DatabaseManager::getAllCustomers() {
+    QVariantList customers;
+
+    if (!db.isOpen()) {
+        qDebug() << "Connection not open. Trying to reopen.";
+        if (!db.open()) {
+            qDebug() << "Reopen failed:" << db.lastError().text();
+            return customers;
+        }
+    }
+
+    QSqlQuery query(db);
+    query.prepare("SELECT customer_name, contact_no, customer_id FROM Orders GROUP BY customer_id HAVING customer_id IS NOT NULL");
+
+    bool success = query.exec();
+    if (!success) {
+        qDebug() << "Error getting customers:" << query.lastError().text();
+        return customers;
+    }
+
+    while (query.next()) {
+        QVariantMap customer;
+        customer["name"] = query.value("customer_name").toString();
+        customer["phone"] = query.value("contact_no").toString();
+        customer["id"] = query.value("customer_id").toInt();
+        customers.append(customer);
+    }
+
+    qDebug() << "Retrieved" << customers.size() << "customers";
+    return customers;
+}
+
+// Search for a customer by name or phone number
+QVariantMap DatabaseManager::getCustomerByNameOrPhone(const QString &searchText) {
+    QVariantMap customer;
+
+    if (!db.isOpen()) {
+        qDebug() << "Connection not open. Trying to reopen.";
+        if (!db.open()) {
+            qDebug() << "Reopen failed:" << db.lastError().text();
+            return customer;
+        }
+    }
+
+    QSqlQuery query(db);
+    query.prepare("SELECT customer_name, contact_no, customer_id FROM Orders "
+                  "WHERE customer_name LIKE ? OR contact_no LIKE ? "
+                  "GROUP BY customer_id ORDER BY order_date DESC LIMIT 1");
+    query.addBindValue("%" + searchText + "%");
+    query.addBindValue("%" + searchText + "%");
+
+    bool success = query.exec();
+    if (!success) {
+        qDebug() << "Error searching customers:" << query.lastError().text();
+        return customer;
+    }
+
+    if (query.next()) {
+        customer["name"] = query.value("customer_name").toString();
+        customer["phone"] = query.value("contact_no").toString();
+        customer["id"] = query.value("customer_id").toInt();
+        qDebug() << "Found customer:" << customer["name"].toString();
+    } else {
+        qDebug() << "Customer not found with search:" << searchText;
+    }
+
+    return customer;
+}
+
+// Add a new customer
+bool DatabaseManager::addCustomer(const QString &name, const QString &phone, int customerId) {
+    if (!db.isOpen()) {
+        qDebug() << "Connection not open. Trying to reopen.";
+        if (!db.open()) {
+            qDebug() << "Reopen failed:" << db.lastError().text();
+            return false;
+        }
+    }
+
+    // Create a dummy order to store customer info
+    // Using current date for the order
+    QDateTime currentDate = QDateTime::currentDateTime();
+    QString dateStr = currentDate.toString("yyyy-MM-dd hh:mm:ss");
+
+    QSqlQuery query(db);
+    query.prepare("INSERT INTO Orders (customer_name, customer_id, contact_no, order_date, order_status, quantity, total) "
+                  "VALUES (?, ?, ?, ?, 'Customer Registration', 0, 0)");
+    query.addBindValue(name);
+    query.addBindValue(customerId);
+    query.addBindValue(phone);
+    query.addBindValue(dateStr);
+
+    bool success = query.exec();
+    if (!success) {
+        qDebug() << "Error adding customer:" << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "Added customer:" << name << "with ID:" << customerId;
+    return true;
+}
+
+// Create a new order
+int DatabaseManager::createOrder(const QString &customerName, int customerId, const QString &contactNo,
+                                 double total, const QString &paymentMethod) {
+    if (!db.isOpen()) {
+        qDebug() << "Connection not open. Trying to reopen.";
+        if (!db.open()) {
+            qDebug() << "Reopen failed:" << db.lastError().text();
+            return -1;
+        }
+    }
+
+    // Get current date-time
+    QDateTime currentDate = QDateTime::currentDateTime();
+    QString dateStr = currentDate.toString("yyyy-MM-dd hh:mm:ss");
+
+    QSqlQuery query(db);
+    query.prepare("INSERT INTO Orders (customer_name, customer_id, contact_no, order_date, order_status, payment_method, quantity, total) "
+                  "VALUES (?, ?, ?, ?, 'Completed', ?, 0, ?)");
+    query.addBindValue(customerName);
+    query.addBindValue(customerId);
+    query.addBindValue(contactNo);
+    query.addBindValue(dateStr);
+    query.addBindValue(paymentMethod);
+    query.addBindValue(total);
+
+    bool success = query.exec();
+    if (!success) {
+        qDebug() << "Error creating order:" << query.lastError().text();
+        return -1;
+    }
+
+    // Get the last inserted ID
+    int orderId = query.lastInsertId().toInt();
+    qDebug() << "Created order with ID:" << orderId;
+    return orderId;
+}
+
+// Add item to an order
+bool DatabaseManager::addOrderItem(int orderId, int medicineId, int quantity, double price) {
+    if (!db.isOpen()) {
+        qDebug() << "Connection not open. Trying to reopen.";
+        if (!db.open()) {
+            qDebug() << "Reopen failed:" << db.lastError().text();
+            return false;
+        }
+    }
+
+    // First, update the medicine quantity in stock
+    QSqlQuery stockQuery(db);
+    stockQuery.prepare("SELECT quantity FROM Stock_info WHERE medicine_id = ?");
+    stockQuery.addBindValue(medicineId);
+
+    if (!stockQuery.exec() || !stockQuery.next()) {
+        qDebug() << "Error fetching medicine stock:" << stockQuery.lastError().text();
+        return false;
+    }
+
+    int currentStock = stockQuery.value("quantity").toInt();
+    int newStock = currentStock - quantity;
+
+    if (newStock < 0) {
+        qDebug() << "Not enough stock for medicine ID:" << medicineId;
+        return false;
+    }
+
+    // Update stock quantity
+    if (!updateMedicineQuantity(medicineId, newStock)) {
+        qDebug() << "Failed to update stock for medicine ID:" << medicineId;
+        return false;
+    }
+
+    // We're using the Orders table to store order items as well
+    // Update the quantity in the order
+    QSqlQuery updateOrderQuery(db);
+    updateOrderQuery.prepare("UPDATE Orders SET quantity = quantity + ? WHERE order_id = ?");
+    updateOrderQuery.addBindValue(quantity);
+    updateOrderQuery.addBindValue(orderId);
+
+    bool success = updateOrderQuery.exec();
+    if (!success) {
+        qDebug() << "Error updating order quantity:" << updateOrderQuery.lastError().text();
+        return false;
+    }
+
+    qDebug() << "Added" << quantity << "of medicine ID" << medicineId << "to order ID" << orderId;
+    return true;
+}
+
+// Apply discount to an order
+bool DatabaseManager::applyDiscount(int orderId, int discountPercentage) {
+    if (!db.isOpen()) {
+        qDebug() << "Connection not open. Trying to reopen.";
+        if (!db.open()) {
+            qDebug() << "Reopen failed:" << db.lastError().text();
+            return false;
+        }
+    }
+
+    // First get the current total
+    QSqlQuery getOrderQuery(db);
+    getOrderQuery.prepare("SELECT total FROM Orders WHERE order_id = ?");
+    getOrderQuery.addBindValue(orderId);
+
+    if (!getOrderQuery.exec() || !getOrderQuery.next()) {
+        qDebug() << "Error getting order total:" << getOrderQuery.lastError().text();
+        return false;
+    }
+
+    double currentTotal = getOrderQuery.value("total").toDouble();
+    double discountedTotal = currentTotal - (currentTotal * discountPercentage / 100.0);
+
+    // Update the order with discounted total
+    QSqlQuery updateQuery(db);
+    updateQuery.prepare("UPDATE Orders SET total = ? WHERE order_id = ?");
+    updateQuery.addBindValue(discountedTotal);
+    updateQuery.addBindValue(orderId);
+
+    bool success = updateQuery.exec();
+    if (!success) {
+        qDebug() << "Error applying discount:" << updateQuery.lastError().text();
+        return false;
+    }
+
+    qDebug() << "Applied" << discountPercentage << "% discount to order ID" << orderId;
+    return true;
+}
+
+// Get order details
+QVariantMap DatabaseManager::getOrderDetails(int orderId) {
+    QVariantMap orderDetails;
+
+    if (!db.isOpen()) {
+        qDebug() << "Connection not open. Trying to reopen.";
+        if (!db.open()) {
+            qDebug() << "Reopen failed:" << db.lastError().text();
+            return orderDetails;
+        }
+    }
+
+    QSqlQuery query(db);
+    query.prepare("SELECT order_id, customer_name, customer_id, contact_no, order_date, order_status, payment_method, quantity, total "
+                  "FROM Orders WHERE order_id = ?");
+    query.addBindValue(orderId);
+
+    bool success = query.exec();
+    if (!success || !query.next()) {
+        qDebug() << "Error getting order details:" << query.lastError().text();
+        return orderDetails;
+    }
+
+    orderDetails["orderID"] = query.value("order_id").toInt();
+    orderDetails["customerName"] = query.value("customer_name").toString();
+    orderDetails["customerID"] = query.value("customer_id").toInt();
+    orderDetails["contactNo"] = query.value("contact_no").toString();
+    orderDetails["orderDate"] = query.value("order_date").toString();
+    orderDetails["orderStatus"] = query.value("order_status").toString();
+    orderDetails["paymentMethod"] = query.value("payment_method").toString();
+    orderDetails["quantity"] = query.value("quantity").toInt();
+    orderDetails["total"] = query.value("total").toDouble();
+
+    qDebug() << "Retrieved details for order ID" << orderId;
+    return orderDetails;
+}
+
+// Get order items (we would need a separate table for this in a real app)
+// For now, this is a placeholder function that would return empty data
+QVariantList DatabaseManager::getOrderItems(int orderId) {
+    QVariantList orderItems;
+
+    qDebug() << "Note: getOrderItems is a placeholder. In a real application, a separate Order_Items table would be used.";
+
+    if (!db.isOpen()) {
+        qDebug() << "Connection not open. Trying to reopen.";
+        if (!db.open()) {
+            qDebug() << "Reopen failed:" << db.lastError().text();
+            return orderItems;
+        }
+    }
+
+    // In a real application, you would query a table like "Order_Items" here
+    // Since we don't have that table in your schema, this is just a placeholder
+
+    return orderItems;
 }
 
 

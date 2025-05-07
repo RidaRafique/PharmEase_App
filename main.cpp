@@ -5,7 +5,6 @@
 
 int main(int argc, char *argv[])
 {
-    QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
     QGuiApplication app(argc, argv);
 
     QQmlApplicationEngine engine;
@@ -19,7 +18,6 @@ int main(int argc, char *argv[])
         []() { QCoreApplication::exit(-1); },
         Qt::QueuedConnection);
     engine.load(QUrl(QStringLiteral("qrc:/qml/App.qml")));
-    // engine.loadFromModule("Pharmease_app", "Main");
 
     return app.exec();
 }
