@@ -415,8 +415,6 @@ Item {
                 spacing: 10
                 width: 300
 
-                // Note: In most cases, employee_id is auto-increment
-                // so we don't need to input it manually
                 TextField { id: newEmployeeName; placeholderText: "Name" }
                 TextField { id: newEmployeePosition; placeholderText: "Position" }
                 TextField { id: newEmployeeSalary; placeholderText: "Salary" }
@@ -424,7 +422,6 @@ Item {
             }
 
             onAccepted: {
-                // Call C++ function to add to database
                 var success = dbManager.addEmployee(
                     newEmployeeName.text,
                     newEmployeePosition.text,

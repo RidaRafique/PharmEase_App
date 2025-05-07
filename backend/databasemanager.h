@@ -135,21 +135,34 @@ public:
     Q_INVOKABLE bool deleteEmployee(const int employeeId);
 
 
-    void getStockInfo();
-    void searchMedicine(const QString &searchText);
-    void searchSupplier(const QString &searchText);
-    bool addStockInfo(int medicineId, const QString &name, const QString &supplier,
-                      double price, const QString &expiryDate, int quantity);
-    bool updateStock(int medicineId, const QString &name, const QString &supplier,
-                     double price, const QString &expiryDate, int quantity);
-    bool deleteStock(int medicineId);
+    Q_INVOKABLE QVariantList getStockInfo();
+    Q_INVOKABLE QVariantList searchMedicine(const QString &searchText);
+    Q_INVOKABLE QVariantList searchSupplier(const QString &searchText);
+    Q_INVOKABLE bool addStockInfo(const QString &name, const QString &supplier, double price, const QString &expiryDate, int quantity);
+    Q_INVOKABLE bool updateStock(int medicineId, const QString &name, const QString &supplier,double price, const QString &expiryDate, int quantity);
+    Q_INVOKABLE bool deleteStock(int medicineId);
+    Q_INVOKABLE QVariantList getInventory();
+
+    Q_INVOKABLE QVariantList getOrders();
+    Q_INVOKABLE QVariantList searchOrderById(const QString &orderId);
+    Q_INVOKABLE QVariantList searchOrderByCustomerId(const QString &customerId);
+    Q_INVOKABLE QVariantList filterOrdersByPaymentMethod(const QString &paymentMethod);
 
     // Add in signals:
-    signals:
-    void stockDataLoaded(QVariantList stockData);
-    void stockAdded(bool success);
-    void stockUpdated(bool success);
-    void stockDeleted(bool success);
+    // signals:
+    // void stockDataLoaded(QVariantList stockData);
+    // void stockAdded(bool success);
+    // void stockUpdated(bool success);
+    // void stockDeleted(bool success);
+
+// public slots:
+//     void fetchOrdersData();
+//     QVariantList getOrderSummary();
+//     QVariantList getOrdersList();
+
+// signals:
+//     void ordersDataChanged(QVariantList orders);
+
 };
 
 

@@ -9,58 +9,33 @@ Item {
     anchors.fill: parent
 
     // Property to hold the database model
-    property var stockModel: []
+    property var stockdata: []
 
-    // Connect to C++ signals
-    Connections {
-        target: dbManager // This should be your database manager object exposed to QML
+    function loadStock() {
+        // Call the C++ function to get stock data
+        stockdata = dbManager.getStockInfo();
+        // Update the model with the retrieved data
+        updateStockModel();
+    }
 
-        // When data is loaded from database
-        function onStockDataLoaded(stockData) {
-            medicineModel.clear()
-            for (var i = 0; i < stockData.length; i++) {
-                medicineModel.append(stockData[i])
-            }
-        }
-
-        // When a stock item is added successfully
-        function onStockAdded(success) {
-            if (success) {
-                // Refresh the data
-                dbManager.getStockInfo()
-            } else {
-                // Show error message
-                errorDialog.open()
-            }
-        }
-
-        // When a stock item is updated
-        function onStockUpdated(success) {
-            if (success) {
-                // Refresh the data
-                dbManager.getStockInfo()
-            } else {
-                // Show error message
-                errorDialog.open()
-            }
-        }
-
-        // When a stock item is deleted
-        function onStockDeleted(success) {
-            if (success) {
-                // Refresh the data
-                dbManager.getStockInfo()
-            } else {
-                // Show error message
-                errorDialog.open()
-            }
+    function updateStockModel() {
+        medicineModel.clear();
+        for (var i = 0; i < stockdata.length; i++) {
+            medicineModel.append({
+                medicine_id: stockdata[i].medicine_id,
+                name: stockdata[i].name,
+                quantity: stockdata[i].quantity,
+                price: stockdata[i].price,
+                supplier: stockdata[i].supplier,
+                expiry_date: stockdata[i].expiry_date,
+                isEditable: false
+            });
         }
     }
 
-    // Load data when component completes
+    // Load data when component is completed
     Component.onCompleted: {
-        // Load stock data from database
-        dbManager.getStockInfo()
+        loadStock();
     }
 
     Rectangle {
@@ -94,10 +69,8 @@ Item {
                     placeholderText: "Search medicine..."
                     Layout.preferredWidth: 400
                     Layout.preferredHeight: 40
-                    onTextChanged: {
-                        dbManager.searchMedicine(searchField.text)
-                    }
                 }
+
                 Button {
                     width: 60
                     height: 30
@@ -113,21 +86,42 @@ Item {
                         verticalAlignment: Text.AlignVCenter
                         font.pointSize: 10
                     }
-                    onClicked: dbManager.searchMedicine(searchField.text)
+                    onClicked: {
+                        // Filter by medicine name
+                        if (searchField.text.trim() !== "") {
+                            var filteredStocks = dbManager.searchMedicine(searchField.text);
+
+                            medicineModel.clear();
+                            for (var j = 0; j < filteredStocks.length; j++) {
+                                medicineModel.append({
+                                    medicine_id: filteredStocks[j].medicine_id,
+                                    name: filteredStocks[j].name,
+                                    quantity: filteredStocks[j].quantity,
+                                    price: filteredStocks[j].price,
+                                    supplier: filteredStocks[j].supplier,
+                                    expiry_date: filteredStocks[j].expiry_date,
+                                    isEditable: false
+                                });
+                            }
+                        } else {
+                            // If search field is empty, show all data
+                            loadStock();
+                        }
+                    }
                 }
+
                 Item {
                     width: 50
                     height: 1
                 }
+
                 TextField {
                     id: searchField1
                     placeholderText: "Search supplier..."
                     Layout.preferredWidth: 400
                     Layout.preferredHeight: 40
-                    onTextChanged: {
-                        dbManager.searchSupplier(searchField1.text)
-                    }
                 }
+
                 Button {
                     width: 60
                     text: "Search"
@@ -144,10 +138,30 @@ Item {
                         verticalAlignment: Text.AlignVCenter
                         font.pointSize: 10
                     }
-                    onClicked: dbManager.searchSupplier(searchField1.text)
+                    onClicked: {
+                        // Filter by supplier
+                        if (searchField1.text.trim() !== "") {
+                            var filteredStocks = dbManager.searchSupplier(searchField1.text);
+
+                            medicineModel.clear();
+                            for (var j = 0; j < filteredStocks.length; j++) {
+                                medicineModel.append({
+                                    medicine_id: filteredStocks[j].medicine_id,
+                                    name: filteredStocks[j].name,
+                                    quantity: filteredStocks[j].quantity,
+                                    price: filteredStocks[j].price,
+                                    supplier: filteredStocks[j].supplier,
+                                    expiry_date: filteredStocks[j].expiry_date,
+                                    isEditable: false
+                                });
+                            }
+                        } else {
+                            // If search field is empty, show all data
+                            loadStock();
+                        }
+                    }
                 }
             }
-
 
             ColumnLayout {
                 id: tableContainer
@@ -170,7 +184,7 @@ Item {
                         width: parent.width
                         anchors.verticalCenter: parent.verticalCenter
 
-                        Text { text: "Medicine ID"; width: 180; horizontalAlignment: Text.AlignHCenter; font.bold: true }
+                        Text { text: "Stock ID"; width: 180; horizontalAlignment: Text.AlignHCenter; font.bold: true }
                         Text { text: "Medicine Name"; width: 170; horizontalAlignment: Text.AlignHCenter; font.bold: true }
                         Text { text: "Quantity"; width: 90; horizontalAlignment: Text.AlignHCenter; font.bold: true }
                         Text { text: "Price per Unit"; width: 120; horizontalAlignment: Text.AlignHCenter; font.bold: true }
@@ -287,16 +301,43 @@ Item {
                                     onClicked: {
                                         if (model.isEditable) {
                                             // Save changes to the database
-                                            dbManager.updateStock(
-                                                idInput.text,
-                                                nameInput.text,
-                                                quantityInput.text,
-                                                priceInput.text,
-                                                supplierInput.text,
-                                                expiryInput.text
-                                            )
+                                            var medId = idInput.text;
+                                            var updatedName = nameInput.text;
+                                            var updatedQuantity = quantityInput.text;
+                                            var updatedPrice = priceInput.text;
+                                            var updatedSupplier = supplierInput.text;
+                                            var updatedExpiry = expiryInput.text;
+
+                                            var success = dbManager.updateStock(
+                                                parseInt(medId),
+                                                updatedName,
+                                                updatedSupplier,
+                                                parseFloat(updatedPrice),
+                                                updatedExpiry,
+                                                parseInt(updatedQuantity)
+                                            );
+
+                                            if (success) {
+                                                // Update model
+                                                medicineModel.set(index, {
+                                                    "medicine_id": medId,
+                                                    "name": updatedName,
+                                                    "quantity": updatedQuantity,
+                                                    "price": updatedPrice,
+                                                    "supplier": updatedSupplier,
+                                                    "expiry_date": updatedExpiry,
+                                                    "isEditable": false
+                                                });
+
+                                                // Refresh data from database
+                                                loadStock();
+                                            } else {
+                                                console.log("Failed to update stock in database");
+                                            }
+                                        } else {
+                                            // Enable editing
+                                            medicineModel.setProperty(index, "isEditable", true);
                                         }
-                                        medicineModel.setProperty(index, "isEditable", !model.isEditable)
                                     }
                                 }
 
@@ -312,8 +353,18 @@ Item {
                                         verticalAlignment: Text.AlignVCenter
                                     }
                                     onClicked: {
-                                        deleteConfirmDialog.medicineId = model.medicine_id
-                                        deleteConfirmDialog.open()
+                                        // Call C++ function to delete from database
+                                        var medicineId = model.medicine_id;
+                                        var success = dbManager.deleteStock(parseInt(medicineId));
+
+                                        if (success) {
+                                            // Remove from model
+                                            medicineModel.remove(index);
+                                            // Refresh data from database
+                                            loadStock();
+                                        } else {
+                                            console.log("Failed to delete medicine from database");
+                                        }
                                     }
                                 }
                             }
@@ -343,8 +394,9 @@ Item {
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
-                onClicked: stockDialog.open()
+                onClicked: addstockDialog.open()
             }
+
             Button {
                 id: backbutton
                 Layout.preferredWidth: 50
@@ -371,7 +423,7 @@ Item {
         }
 
         Dialog {
-            id: stockDialog
+            id: addstockDialog
             title: "Add New Stock"
             modal: true
             standardButtons: Dialog.Ok | Dialog.Cancel
@@ -380,7 +432,6 @@ Item {
                 spacing: 10
                 width: 300
 
-                TextField { id: newId; placeholderText: "Medicine ID" }
                 TextField { id: newName; placeholderText: "Name" }
                 TextField { id: newQuantity; placeholderText: "Quantity" }
                 TextField { id: newPrice; placeholderText: "Price" }
@@ -389,47 +440,27 @@ Item {
             }
 
             onAccepted: {
-                // Call the database function to add stock
-                dbManager.addStockInfo(
-                    parseInt(newId.text),
+                var success = dbManager.addStockInfo(
                     newName.text,
                     newSupplier.text,
-                    parseFloat(newPrice.text),
+                    newPrice.text,
                     newExpiry.text,
-                    parseInt(newQuantity.text)
-                )
+                    newQuantity.text
+                );
 
-                // Clear fields
-                newId.text = ""
-                newName.text = ""
-                newQuantity.text = ""
-                newPrice.text = ""
-                newSupplier.text = ""
-                newExpiry.text = ""
+                if(success) {
+                    loadStock();
+                    // Clear fields
+                    newName.text = "";
+                    newQuantity.text = "";
+                    newPrice.text = "";
+                    newSupplier.text = "";
+                    newExpiry.text = "";
+                } else {
+                    console.log("Failed to add stock to database");
+                }
             }
         }
-
-        // Dialog {
-        //     id: deleteConfirmDialog
-        //     title: "Confirm Delete"
-        //     text: "Are you sure you want to delete this item?"
-        //     modal: true
-        //     property int medicineId: -1
-        //     standardButtons: Dialog.Yes | Dialog.No
-
-        //     onAccepted: {
-        //         // Call database function to delete the stock item
-        //         dbManager.deleteStock(medicineId)
-        //     }
-        // }
-
-        // Dialog {
-        //     id: errorDialog
-        //     title: "Error"
-        //     text: "An error occurred during the database operation."
-        //     modal: true
-        //     standardButtons: Dialog.Ok
-        // }
 
         ListModel {
             id: medicineModel

@@ -7,6 +7,24 @@ Item {
     id: root
     anchors.fill: parent
 
+    // Connect to C++ DatabaseManager
+    Component.onCompleted: {
+        // Call function to fetch data from database
+        loadOrders();
+
+        // Set initial filter to "All" without triggering a reload
+        paymentFilter.currentIndex = 0;
+    }
+
+    // Function to load orders to avoid code duplication
+    function loadOrders() {
+        var ordersData = dbManager.getOrders();
+        ordermodel.clear();
+        for (var i = 0; i < ordersData.length; i++) {
+            ordermodel.append(ordersData[i]);
+        }
+    }
+
     Rectangle {
         id: bgrectangle
         color: "#daeae6"
@@ -34,7 +52,7 @@ Item {
             spacing: 20
             TextField {
                 id: searchField
-                placeholderText: "Search medicine name..."
+                placeholderText: "Search Order ID..."
                 Layout.preferredWidth: 350
                 Layout.preferredHeight: 40
             }
@@ -53,7 +71,31 @@ Item {
                     verticalAlignment: Text.AlignVCenter
                     font.pointSize: 10
                 }
-                onClicked: console.log("Searching: " + searchField.text)
+                onClicked: {
+                    ordermodel.clear();
+                    // Filter model by medicine name
+                    if (searchField.text.trim() !== "") {
+                        var filteredOrders = dbManager.searchOrderById(searchField.text);
+
+                        ordermodel.clear();
+                        for (var j = 0; j < filteredOrders.length; j++) {
+                            ordermodel.append({
+                                order_id: filteredOrders[j].order_id,
+                                customer_id: filteredOrders[j].customer_id,
+                                customer_name: filteredOrders[j].customer_name,
+                                contact_no: filteredOrders[j].contact_no,
+                                order_status: filteredOrders[j].order_status,
+                                quantity: filteredOrders[j].quantity,
+                                payment_method: filteredOrders[j].payment_method,
+                                total: filteredOrders[j].total,
+                                order_date: filteredOrders[j].order_date,
+                                isEditable: false
+                            });
+                        }
+                    } else {
+                        loadOrders();
+                    }
+                }
             }
             Item {
                 width: 40
@@ -61,7 +103,7 @@ Item {
             }
             TextField {
                 id: searchField1
-                placeholderText: "Search medicine name..."
+                placeholderText: "Search Customer ID..."
                 Layout.preferredWidth: 350
                 Layout.preferredHeight: 40
             }
@@ -80,13 +122,59 @@ Item {
                     verticalAlignment: Text.AlignVCenter
                     font.pointSize: 10
                 }
-                onClicked: console.log("Searching: " + searchField1.text)
+                onClicked: {
+                    ordermodel.clear();
+                    // Filter model by medicine name
+                    if (searchField1.text.trim() !== "") {
+                        var filteredOrders = dbManager.searchOrderByCustomerId(searchField1.text);
+
+                        ordermodel.clear();
+                        for (var j = 0; j < filteredOrders.length; j++) {
+                            ordermodel.append({
+                                order_id: filteredOrders[j].order_id,
+                                customer_id: filteredOrders[j].customer_id,
+                                customer_name: filteredOrders[j].customer_name,
+                                contact_no: filteredOrders[j].contact_no,
+                                order_status: filteredOrders[j].order_status,
+                                quantity: filteredOrders[j].quantity,
+                                payment_method: filteredOrders[j].payment_method,
+                                total: filteredOrders[j].total,
+                                order_date: filteredOrders[j].order_date,
+                                isEditable: false
+                            });
+                        }
+                    } else {
+                        loadOrders();
+                    }
+                }
             }
             ComboBox {
                 id: paymentFilter
                 Layout.preferredHeight: 30
                 width: 170
                 model: ["All", "Cash", "Card", "Online"]
+                onCurrentTextChanged: {
+                    if (currentText === "All") {
+                        loadOrders();
+                    } else {
+                        var filteredOrders = dbManager.filterOrdersByPaymentMethod(currentText);
+                        ordermodel.clear();
+                        for (var j = 0; j < filteredOrders.length; j++) {
+                            ordermodel.append({
+                                order_id: filteredOrders[j].order_id,
+                                customer_id: filteredOrders[j].customer_id,
+                                customer_name: filteredOrders[j].customer_name,
+                                contact_no: filteredOrders[j].contact_no,
+                                order_status: filteredOrders[j].order_status,
+                                quantity: filteredOrders[j].quantity,
+                                payment_method: filteredOrders[j].payment_method,
+                                total: filteredOrders[j].total,
+                                order_date: filteredOrders[j].order_date,
+                                isEditable: false
+                            });
+                        }
+                    }
+                }
             }
         }
 
@@ -112,10 +200,10 @@ Item {
                     rowSpacing: 5
 
                     Text { text: "Order ID"; horizontalAlignment: Text.AlignHCenter; width: 140; font.bold: true }
-                    Text { text: "Medicine ID"; horizontalAlignment: Text.AlignHCenter; width: 130; font.bold: true }
-                    Text { text: "Medicine"; horizontalAlignment: Text.AlignHCenter; width: 140; font.bold: true }
-                    Text { text: "Customer ID"; horizontalAlignment: Text.AlignHCenter; width: 140; font.bold: true }
-                    Text { text: "Customer Name"; horizontalAlignment: Text.AlignHCenter; width: 150; font.bold: true }
+                    Text { text: "Customer ID"; horizontalAlignment: Text.AlignHCenter; width: 130; font.bold: true }
+                    Text { text: "Customer Name"; horizontalAlignment: Text.AlignHCenter; width: 140; font.bold: true }
+                    Text { text: "Customer Contact No."; horizontalAlignment: Text.AlignHCenter; width: 140; font.bold: true }
+                    Text { text: "Order Status"; horizontalAlignment: Text.AlignHCenter; width: 150; font.bold: true }
                     Text { text: "Qty"; horizontalAlignment: Text.AlignHCenter; width: 50; font.bold: true }
                     Text { text: "Payment"; horizontalAlignment: Text.AlignHCenter; width: 110; font.bold: true }
                     Text { text: "Total (Rs.)"; horizontalAlignment: Text.AlignHCenter; width: 80; font.bold: true }
@@ -142,32 +230,33 @@ Item {
                         Row {
                             anchors.fill: parent
 
-                    Rectangle { width: 140; height: 40; border.color: "black"; color: "white"
-                        Text { text: model.orderID; anchors.fill: parent; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } }
+                            Rectangle { width: 140; height: 40; border.color: "black"; color: "white"
+                                Text { text: model.order_id; anchors.fill: parent; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } }
 
-                    Rectangle { width: 140; height: 40; border.color: "black"; color: "white"
-                        Text { text: model.medicineID; anchors.fill: parent; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } }
+                            Rectangle { width: 140; height: 40; border.color: "black"; color: "white"
+                                Text { text: model.customer_id; anchors.fill: parent; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } }
 
-                    Rectangle { width: 160; height: 40; border.color: "black"; color: "white"
-                        Text { text: model.medicineName; anchors.fill: parent; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } }
+                            Rectangle { width: 160; height: 40; border.color: "black"; color: "white"
+                                Text { text: model.customer_name; anchors.fill: parent; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } }
 
-                    Rectangle { width: 140; height: 40; border.color: "black"; color: "white"
-                        Text { text: model.customerID; anchors.fill: parent; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } }
+                            Rectangle { width: 140; height: 40; border.color: "black"; color: "white"
+                                Text { text: model.contact_no; anchors.fill: parent; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } }
 
-                    Rectangle { width: 160; height: 40; border.color: "black"; color: "white"
-                        Text { text: model.customerName; anchors.fill: parent; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } }
+                            Rectangle { width: 160; height: 40; border.color: "black"; color: "white"
+                                Text { text: model.order_status; anchors.fill: parent; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } }
 
-                    Rectangle { width: 80; height: 40; border.color: "black"; color: "white"
-                        Text { text: model.quantity; anchors.fill: parent; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } }
+                            Rectangle { width: 80; height: 40; border.color: "black"; color: "white"
+                                Text { text: model.quantity; anchors.fill: parent; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } }
 
-                    Rectangle { width: 100; height: 40; border.color: "black"; color: "white"
-                        Text { text: model.paymentMethod; anchors.fill: parent; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } }
+                            Rectangle { width: 100; height: 40; border.color: "black"; color: "white"
+                                Text { text: model.payment_method; anchors.fill: parent; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } }
 
-                    Rectangle { width: 100; height: 40; border.color: "black"; color: "white"
-                        Text { text: "Rs." + model.totalAmount; anchors.fill: parent; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } }
+                            Rectangle { width: 100; height: 40; border.color: "black"; color: "white"
+                                Text { text: "Rs." + model.total; anchors.fill: parent; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } }
 
-                    Rectangle { width: 130; height: 40; border.color: "black"; color: "white"
-                        Text { text: model.date; anchors.fill: parent; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } }
+                            Rectangle { width: 130; height: 40; border.color: "black"; color: "white"
+                                Text { text: model.order_date; anchors.fill: parent; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } }
+                        }
                     }
                 }
             }
@@ -200,26 +289,7 @@ Item {
     }
         ListModel {
             id: ordermodel
-            ListElement { orderID: "001"; medicineID: "M1001"; medicineName: "Paracetamol"; customerID: "C001"; customerName: "John Doe"; quantity: "2"; paymentMethod: "Cash"; totalAmount: "500"; date: "13-01-2025" }
-            ListElement { orderID: "002"; medicineID: "M1002"; medicineName: "Ibuprofen"; customerID: "C002"; customerName: "Jane Smith"; quantity: "1"; paymentMethod: "Card"; totalAmount: "300"; date: "15-01-2025" }
-            ListElement { orderID: "003"; medicineID: "M1003"; medicineName: "Aspirin"; customerID: "C003"; customerName: "Alice Johnson"; quantity: "3"; paymentMethod: "Online"; totalAmount: "750"; date: "21-01-2025" }
-            ListElement { orderID: "004"; medicineID: "M1004"; medicineName: "Amoxicillin"; customerID: "C004"; customerName: "Robert Brown"; quantity: "1"; paymentMethod: "Cash"; totalAmount: "450"; date: "23-01-2025" }
-            ListElement { orderID: "005"; medicineID: "M1005"; medicineName: "Ciprofloxacin"; customerID: "C005"; customerName: "Emily Davis"; quantity: "2"; paymentMethod: "Card"; totalAmount: "700"; date: "25-01-2025" }
-            ListElement { orderID: "006"; medicineID: "M1006"; medicineName: "Metformin"; customerID: "C006"; customerName: "Daniel Wilson"; quantity: "1"; paymentMethod: "Online"; totalAmount: "200"; date: "27-01-2025" }
-            ListElement { orderID: "007"; medicineID: "M1007"; medicineName: "Atorvastatin"; customerID: "C007"; customerName: "Sarah Miller"; quantity: "3"; paymentMethod: "Cash"; totalAmount: "900"; date: "29-01-2025" }
-            ListElement { orderID: "008"; medicineID: "M1008"; medicineName: "Amlodipine"; customerID: "C008"; customerName: "William Johnson"; quantity: "2"; paymentMethod: "Card"; totalAmount: "600"; date: "31-01-2025" }
-            ListElement { orderID: "009"; medicineID: "M1009"; medicineName: "Losartan"; customerID: "C009"; customerName: "Olivia Martinez"; quantity: "1"; paymentMethod: "Online"; totalAmount: "350"; date: "02-02-2025" }
-            ListElement { orderID: "010"; medicineID: "M1010"; medicineName: "Omeprazole"; customerID: "C010"; customerName: "Michael Clark"; quantity: "3"; paymentMethod: "Cash"; totalAmount: "850"; date: "04-02-2025" }
-            ListElement { orderID: "011"; medicineID: "M1011"; medicineName: "Gabapentin"; customerID: "C011"; customerName: "Sophia Hernandez"; quantity: "2"; paymentMethod: "Card"; totalAmount: "750"; date: "06-02-2025" }
-            ListElement { orderID: "012"; medicineID: "M1012"; medicineName: "Sertraline"; customerID: "C012"; customerName: "Ethan Anderson"; quantity: "1"; paymentMethod: "Online"; totalAmount: "500"; date: "08-02-2025" }
-            ListElement { orderID: "013"; medicineID: "M1013"; medicineName: "Lisinopril"; customerID: "C013"; customerName: "Ava Thompson"; quantity: "2"; paymentMethod: "Cash"; totalAmount: "600"; date: "10-02-2025" }
-            ListElement { orderID: "014"; medicineID: "M1014"; medicineName: "Levothyroxine"; customerID: "C014"; customerName: "Mason White"; quantity: "3"; paymentMethod: "Card"; totalAmount: "900"; date: "12-02-2025" }
-            ListElement { orderID: "015"; medicineID: "M1015"; medicineName: "Montelukast"; customerID: "C015"; customerName: "Isabella Garcia"; quantity: "1"; paymentMethod: "Online"; totalAmount: "400"; date: "14-02-2025" }
-            ListElement { orderID: "016"; medicineID: "M1016"; medicineName: "Duloxetine"; customerID: "C016"; customerName: "James Robinson"; quantity: "2"; paymentMethod: "Cash"; totalAmount: "700"; date: "16-02-2025" }
-            ListElement { orderID: "017"; medicineID: "M1017"; medicineName: "Fluoxetine"; customerID: "C017"; customerName: "Charlotte Scott"; quantity: "3"; paymentMethod: "Card"; totalAmount: "950"; date: "18-02-2025" }
-            ListElement { orderID: "018"; medicineID: "M1018"; medicineName: "Escitalopram"; customerID: "C018"; customerName: "Benjamin Adams"; quantity: "1"; paymentMethod: "Online"; totalAmount: "550"; date: "20-02-2025" }
-            ListElement { orderID: "019"; medicineID: "M1019"; medicineName: "Clopidogrel"; customerID: "C019"; customerName: "Mia Lewis"; quantity: "2"; paymentMethod: "Cash"; totalAmount: "750"; date: "22-02-2025" }
-            ListElement { orderID: "020"; medicineID: "M1020"; medicineName: "Metoprolol"; customerID: "C020"; customerName: "Alexander Young"; quantity: "3"; paymentMethod: "Card"; totalAmount: "900"; date: "24-02-2025" }
+            // Will be populated from database in Component.onCompleted
         }
     }
-}
+

@@ -27,18 +27,8 @@ Item {
             Text {
                 id: employeeid
                 color: "#5b99d6"
-                text: qsTr("/*Employee ID*/")
-                font.pixelSize: 30
-                horizontalAlignment: Text.AlignHCenter
-                anchors.horizontalCenter: parent.horizontalCenter
-                font.family: "Tahoma"
-            }
-
-            Text {
-                id: employeedesignation
-                color: "#5b99d6"
-                text: qsTr("/*Employee Designation*/")
-                font.pixelSize: 30
+                text: qsTr("Welcome to PharmEase")
+                font.pixelSize: 40
                 horizontalAlignment: Text.AlignHCenter
                 anchors.horizontalCenter: parent.horizontalCenter
                 font.family: "Tahoma"

@@ -1382,50 +1382,50 @@ bool DatabaseManager::deleteEmployee(const int employeeId) {
 }
 
 
-void DatabaseManager::getStockInfo()
+QVariantList DatabaseManager::getStockInfo()
 {
+    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+    QVariantList stockList;
     if (!db.isOpen()) {
         qDebug() << "Connection not open. Trying to reopen.";
         if (!db.open()) {
             qDebug() << "Reopen failed:" << db.lastError().text();
-            emit stockDataLoaded(QVariantList());
-            return;
+            return stockList;
         }
     }
 
     QSqlQuery query(db);
     query.prepare("SELECT medicine_id, name, supplier, price, expiry_date, quantity FROM Stock_info");
 
-    if (!query.exec()) {
-        qDebug() << "Error fetching stock info:" << query.lastError().text();
-        emit stockDataLoaded(QVariantList());
-        return;
+    if (query.exec()) {
+        while (query.next()) {
+            QVariantMap stockItem;
+            stockItem["medicine_id"] = query.value(0).toInt();
+            stockItem["name"] = query.value(1).toString();
+            stockItem["supplier"] = query.value(2).toString();
+            stockItem["price"] = query.value(3).toDouble();
+            stockItem["expiry_date"] = query.value(4).toString();
+            stockItem["quantity"] = query.value(5).toInt();
+            stockItem["isEditable"] = false;  // default not editable
+            stockList.append(stockItem);
+        }
+        qDebug() << "getStockInfoList: Retrieved" << stockList.size() << "records.";
+    } else {
+        qDebug() << "getStockinfoList: Query failed:" << query.lastError().text();
     }
+    return stockList;
 
-    QVariantList stockList;
-    while (query.next()) {
-        QVariantMap stockItem;
-        stockItem["medicine_id"] = query.value(0).toInt();
-        stockItem["name"] = query.value(1).toString();
-        stockItem["supplier"] = query.value(2).toString();
-        stockItem["price"] = query.value(3).toDouble();
-        stockItem["expiry_date"] = query.value(4).toString();
-        stockItem["quantity"] = query.value(5).toInt();
-        stockItem["isEditable"] = false;  // default not editable
-        stockList.append(stockItem);
-    }
-
-    emit stockDataLoaded(stockList);
 }
 
-void DatabaseManager::searchMedicine(const QString &searchText)
+
+QVariantList DatabaseManager::searchMedicine(const QString &searchText)
 {
+    QVariantList stockList;
     if (!db.isOpen()) {
         qDebug() << "Connection not open. Trying to reopen.";
         if (!db.open()) {
             qDebug() << "Reopen failed:" << db.lastError().text();
-            emit stockDataLoaded(QVariantList());
-            return;
+            return stockList;
         }
     }
 
@@ -1437,11 +1437,9 @@ void DatabaseManager::searchMedicine(const QString &searchText)
 
     if (!query.exec()) {
         qDebug() << "Error searching medicines:" << query.lastError().text();
-        emit stockDataLoaded(QVariantList());
-        return;
+        return stockList;
     }
 
-    QVariantList stockList;
     while (query.next()) {
         QVariantMap stockItem;
         stockItem["medicine_id"] = query.value(0).toInt();
@@ -1454,17 +1452,17 @@ void DatabaseManager::searchMedicine(const QString &searchText)
         stockList.append(stockItem);
     }
 
-    emit stockDataLoaded(stockList);
+    return stockList;
 }
 
-void DatabaseManager::searchSupplier(const QString &searchText)
+QVariantList DatabaseManager::searchSupplier(const QString &searchText)
 {
+    QVariantList stockList;
     if (!db.isOpen()) {
         qDebug() << "Connection not open. Trying to reopen.";
         if (!db.open()) {
             qDebug() << "Reopen failed:" << db.lastError().text();
-            emit stockDataLoaded(QVariantList());
-            return;
+            return stockList;
         }
     }
 
@@ -1475,11 +1473,9 @@ void DatabaseManager::searchSupplier(const QString &searchText)
 
     if (!query.exec()) {
         qDebug() << "Error searching suppliers:" << query.lastError().text();
-        emit stockDataLoaded(QVariantList());
-        return;
+        return stockList;
     }
 
-    QVariantList stockList;
     while (query.next()) {
         QVariantMap stockItem;
         stockItem["medicine_id"] = query.value(0).toInt();
@@ -1492,54 +1488,47 @@ void DatabaseManager::searchSupplier(const QString &searchText)
         stockList.append(stockItem);
     }
 
-    emit stockDataLoaded(stockList);
+    return stockList;
 }
 
-bool DatabaseManager::addStockInfo(int medicineId, const QString &name, const QString &supplier,
-                                   double price, const QString &expiryDate, int quantity)
+bool DatabaseManager::addStockInfo( const QString &name, const QString &supplier, double price, const QString &expiry_date, int quantity)
 {
+    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
     if (!db.isOpen()) {
         qDebug() << "Connection not open. Trying to reopen.";
         if (!db.open()) {
             qDebug() << "Reopen failed:" << db.lastError().text();
-            emit stockAdded(false);
             return false;
         }
     }
 
     QSqlQuery query(db);
-    query.prepare("INSERT INTO Stock_info (medicine_id, name, supplier, price, expiry_date, quantity) "
-                  "VALUES (?, ?, ?, ?, ?, ?)");
-    query.addBindValue(medicineId);
-    query.addBindValue(name);
-    query.addBindValue(supplier);
-    query.addBindValue(price);
-    query.addBindValue(expiryDate);
-    query.addBindValue(quantity);
+    // If medicine_id is 0 or not provided, let the database auto-increment it
+        query.prepare("INSERT INTO Stock_info (name, supplier, price, expiry_date, quantity) "
+                      "VALUES (?, ?, ?, ?, ?)");
+        query.addBindValue(name);
+        query.addBindValue(supplier);
+        query.addBindValue(price);
+        query.addBindValue(expiry_date);
+        query.addBindValue(quantity);
 
     bool success = query.exec();
     if (!success) {
         qDebug() << "Error adding stock:" << query.lastError().text();
+        return false;
+    } else {
+        qDebug() << "addstockinfo: Successfully added new stock.";
+        return true;
     }
-
-    emit stockAdded(success);
-
-    if (success) {
-        // Reload data
-        getStockInfo();
-    }
-
-    return success;
 }
 
-bool DatabaseManager::updateStock(int medicineId, const QString &name, const QString &supplier,
-                                  double price, const QString &expiryDate, int quantity)
+bool DatabaseManager::updateStock(int medicineId, const QString &name, const QString &supplier, double price, const QString &expiryDate, int quantity)
 {
+     QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
     if (!db.isOpen()) {
         qDebug() << "Connection not open. Trying to reopen.";
         if (!db.open()) {
             qDebug() << "Reopen failed:" << db.lastError().text();
-            emit stockUpdated(false);
             return false;
         }
     }
@@ -1557,25 +1546,20 @@ bool DatabaseManager::updateStock(int medicineId, const QString &name, const QSt
     bool success = query.exec();
     if (!success) {
         qDebug() << "Error updating stock:" << query.lastError().text();
+        return false;
+    } else {
+        qDebug() << "updatestock: Successfully updated " << name;
+        return true;
     }
-
-    emit stockUpdated(success);
-
-    if (success) {
-        // Reload data
-        getStockInfo();
-    }
-
-    return success;
 }
 
 bool DatabaseManager::deleteStock(int medicineId)
 {
+    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
     if (!db.isOpen()) {
         qDebug() << "Connection not open. Trying to reopen.";
         if (!db.open()) {
             qDebug() << "Reopen failed:" << db.lastError().text();
-            emit stockDeleted(false);
             return false;
         }
     }
@@ -1587,14 +1571,337 @@ bool DatabaseManager::deleteStock(int medicineId)
     bool success = query.exec();
     if (!success) {
         qDebug() << "Error deleting stock:" << query.lastError().text();
-    }
-
-    emit stockDeleted(success);
-
-    if (success) {
-        // Reload data
-        getStockInfo();
+        return false;
+    } else {
+        qDebug() << "deletestock: Successfully deleted medicine with ID" << medicineId;
+        return true;
     }
 
     return success;
 }
+
+// // Add these functions to your DatabaseManager class
+
+// QVariantList DatabaseManager::getOrderSummary()
+// {
+//     QVariantList ordersSummary;
+
+//     // Join Orders, OrderDetails, and Stock_info tables to get order summary
+//     QSqlQuery query;
+//     query.prepare(
+//         "SELECT o.order_id, o.customer_name, o.order_date, o.order_status, o.payment_method, "
+//         "GROUP_CONCAT(si.name, ', ') as medicines, "
+//         "SUM(od.quantity) as total_quantity, "
+//         "SUM(od.price * od.quantity) as total_amount "
+//         "FROM Orders o "
+//         "JOIN OrderDetails od ON o.order_id = od.order_id "
+//         "JOIN Stock_info si ON od.medicine_id = si.medicine_id "
+//         "GROUP BY o.order_id "
+//         "ORDER BY o.order_id DESC"
+//         );
+
+//     if (query.exec()) {
+//         while (query.next()) {
+//             QVariantMap orderData;
+//             orderData["orderID"] = query.value("order_id").toString();
+//             orderData["customerName"] = query.value("customer_name").toString();
+//             orderData["medicines"] = query.value("medicines").toString();
+//             orderData["totalQuantity"] = query.value("total_quantity").toString();
+//             orderData["paymentMethod"] = query.value("payment_method").toString();
+//             orderData["totalAmount"] = query.value("total_amount").toString();
+//             orderData["orderStatus"] = query.value("order_status").toString();
+//             orderData["date"] = query.value("order_date").toString();
+
+//             ordersSummary.append(orderData);
+//         }
+//     } else {
+//         qDebug() << "Error fetching order summary:" << query.lastError().text();
+//     }
+
+//     return ordersSummary;
+// }
+
+// QVariantList DatabaseManager::getOrdersList()
+// {
+//     QVariantList ordersDetailList;
+
+//     // Join Orders, OrderDetails, and Stock_info tables to get detailed order information
+//     QSqlQuery query;
+//     query.prepare(
+//         "SELECT od.ordered_item_id, od.order_id, o.customer_name, o.order_date, "
+//         "od.medicine_id, si.name as medicine_name, od.quantity, od.price, "
+//         "o.payment_method "
+//         "FROM OrderDetails od "
+//         "JOIN Orders o ON od.order_id = o.order_id "
+//         "JOIN Stock_info si ON od.medicine_id = si.medicine_id "
+//         "ORDER BY od.order_id DESC, od.ordered_item_id"
+//         );
+
+//     if (query.exec()) {
+//         while (query.next()) {
+//             QVariantMap orderData;
+//             orderData["itemID"] = query.value("ordered_item_id").toString();
+//             orderData["orderID"] = query.value("order_id").toString();
+//             orderData["medicineID"] = query.value("medicine_id").toString();
+//             orderData["medicineName"] = query.value("medicine_name").toString();
+//             orderData["customerName"] = query.value("customer_name").toString();
+//             orderData["quantity"] = query.value("quantity").toString();
+//             orderData["price"] = query.value("price").toString();
+//             orderData["paymentMethod"] = query.value("payment_method").toString();
+//             orderData["date"] = query.value("order_date").toString();
+
+//             ordersDetailList.append(orderData);
+//         }
+//     } else {
+//         qDebug() << "Error fetching orders details:" << query.lastError().text();
+//     }
+
+//     return ordersDetailList;
+// }
+
+// void DatabaseManager::fetchOrdersData()
+// {
+//     // This function will emit the signal with the detailed orders data
+//     QVariantList detailedOrders = getOrdersList();
+//     emit ordersDataChanged(detailedOrders);
+// }
+
+// Fixed version of the getInventory function
+QVariantList DatabaseManager::getInventory()
+{
+    QVariantList stockList;
+
+    // Make sure we have a valid connection
+    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+    if (!db.isValid()) {
+        qDebug() << "Invalid database connection";
+        return stockList;
+    }
+
+    // Try to open the connection if it's not already open
+    if (!db.isOpen()) {
+        qDebug() << "Connection not open. Trying to open.";
+        if (!db.open()) {
+            qDebug() << "Failed to open database:" << db.lastError().text();
+            return stockList;
+        }
+    }
+
+    // Create and execute the query
+    QSqlQuery query(db);
+
+    // Check if the table exists
+    query.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='Stock_info'");
+    if (!query.next()) {
+        qDebug() << "Table 'Stock_info' does not exist!";
+        return stockList;
+    }
+
+    // Execute the main query with proper error checking
+    bool success = query.exec("SELECT medicine_id, name, supplier, price, expiry_date, quantity, contact_no FROM Stock_info");
+
+    if (!success) {
+        qDebug() << "Query failed:" << query.lastError().text();
+        qDebug() << "SQL statement:" << query.lastQuery();
+        return stockList;
+    }
+
+    // Process the results
+    while (query.next()) {
+        QVariantMap stockItem;
+        stockItem["medicine_id"] = query.value(0).toInt();
+        stockItem["name"] = query.value(1).toString();
+        stockItem["supplier"] = query.value(2).toString();
+        stockItem["price"] = query.value(3).toDouble();
+        stockItem["expiry_date"] = query.value(4).toString();
+        stockItem["quantity"] = query.value(5).toInt();
+        stockItem["contact_no"] = query.value(6).toString(); // Changed to toString to prevent issues with large numbers
+        stockItem["isEditable"] = false;  // default not editable
+        stockList.append(stockItem);
+    }
+
+    qDebug() << "getInventory: Retrieved" << stockList.size() << "records.";
+
+    return stockList;
+}
+
+QVariantList DatabaseManager::getOrders()
+{
+    QVariantList ordersList;
+    // Make sure we have a valid connection
+    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+    if (!db.isValid()) {
+        qDebug() << "Invalid database connection";
+        return ordersList;
+    }
+
+    // Try to open the connection if it's not already open
+    if (!db.isOpen()) {
+        qDebug() << "Connection not open. Trying to open.";
+        if (!db.open()) {
+            qDebug() << "Failed to open database:" << db.lastError().text();
+            return ordersList;
+        }
+    }
+
+    // Create and execute the query
+    QSqlQuery query(db);
+    // Check if the table exists
+    query.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='Orders'");
+    if (!query.next()) {
+        qDebug() << "Table 'Orders' does not exist!";
+        return ordersList;
+    }
+
+    // Execute the main query with proper error checking
+    // Assuming Orders table schema is something like:
+    // orderID, customerID, customerName, customerContact, orderStatus, quantity, paymentMethod, totalAmount, date
+    bool success = query.exec("SELECT order_id, customer_id, customer_name, contact_no, order_status, quantity, payment_method, total, order_date FROM Orders");
+    if (!success) {
+        qDebug() << "Query failed:" << query.lastError().text();
+        qDebug() << "SQL statement:" << query.lastQuery();
+        return ordersList;
+    }
+
+    // Process the results
+    while (query.next()) {
+        QVariantMap orderItem;
+        orderItem["order_id"] = query.value(0).toString();
+        orderItem["customer_id"] = query.value(1).toString();
+        orderItem["customer_name"] = query.value(2).toString();
+        orderItem["contact_no"] = query.value(3).toString();
+        orderItem["order_status"] = query.value(4).toString();
+        orderItem["quantity"] = query.value(5).toInt();
+        orderItem["payment_method"] = query.value(6).toString();
+        orderItem["total"] = query.value(7).toDouble();
+        orderItem["order_date"] = query.value(8).toString();
+
+        ordersList.append(orderItem);
+    }
+
+    qDebug() << "getOrders: Retrieved" << ordersList.size() << "records.";
+    return ordersList;
+}
+
+QVariantList DatabaseManager::searchOrderById(const QString &orderId)
+{
+    QVariantList ordersList;
+    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+
+    if (!db.isOpen()) {
+        qDebug() << "Connection not open. Trying to reopen.";
+        if (!db.open()) {
+            qDebug() << "Reopen failed:" << db.lastError().text();
+            return ordersList;
+        }
+    }
+
+    QSqlQuery query(db);
+    query.prepare("SELECT order_id, customer_id, customer_name, contact_no, order_status, quantity, payment_method, total, order_date FROM Orders WHERE order_id LIKE ?");
+    query.addBindValue("%" + orderId + "%");
+
+    if (!query.exec()) {
+        qDebug() << "Error searching order by ID:" << query.lastError().text();
+        return ordersList;
+    }
+
+    while (query.next()) {
+        QVariantMap orderItem;
+        orderItem["order_id"] = query.value(0).toString();
+        orderItem["customer_id"] = query.value(1).toString();
+        orderItem["customer_name"] = query.value(2).toString();
+        orderItem["contact_no"] = query.value(3).toString();
+        orderItem["order_status"] = query.value(4).toString();
+        orderItem["quantity"] = query.value(5).toInt();
+        orderItem["payment_method"] = query.value(6).toString();
+        orderItem["total"] = query.value(7).toDouble();
+        orderItem["order_date"] = query.value(8).toString();
+
+        ordersList.append(orderItem);
+    }
+
+    return ordersList;
+}
+
+QVariantList DatabaseManager::searchOrderByCustomerId(const QString &customerId)
+{
+    QVariantList ordersList;
+    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+
+    if (!db.isOpen()) {
+        qDebug() << "Connection not open. Trying to reopen.";
+        if (!db.open()) {
+            qDebug() << "Reopen failed:" << db.lastError().text();
+            return ordersList;
+        }
+    }
+
+    QSqlQuery query(db);
+    query.prepare("SELECT order_id, customer_id, customer_name, contact_no, order_status, quantity, payment_method, total, order_date FROM Orders WHERE customer_id LIKE ?");
+    query.addBindValue("%" + customerId + "%");
+
+    if (!query.exec()) {
+        qDebug() << "Error searching order by customer ID:" << query.lastError().text();
+        return ordersList;
+    }
+
+    while (query.next()) {
+        QVariantMap orderItem;
+        orderItem["order_id"] = query.value(0).toString();
+        orderItem["customer_id"] = query.value(1).toString();
+        orderItem["customer_name"] = query.value(2).toString();
+        orderItem["contact_no"] = query.value(3).toString();
+        orderItem["order_status"] = query.value(4).toString();
+        orderItem["quantity"] = query.value(5).toInt();
+        orderItem["payment_method"] = query.value(6).toString();
+        orderItem["total"] = query.value(7).toDouble();
+        orderItem["order_date"] = query.value(8).toString();
+
+        ordersList.append(orderItem);
+    }
+
+    return ordersList;
+}
+
+QVariantList DatabaseManager::filterOrdersByPaymentMethod(const QString &paymentMethod)
+{
+    QVariantList ordersList;
+    QSqlDatabase db = QSqlDatabase::database("pharmacy_connection");
+
+    if (!db.isOpen()) {
+        qDebug() << "Connection not open. Trying to reopen.";
+        if (!db.open()) {
+            qDebug() << "Reopen failed:" << db.lastError().text();
+            return ordersList;
+        }
+    }
+
+    QSqlQuery query(db);
+    query.prepare("SELECT order_id, customer_id, customer_name, contact_no, order_status, quantity, payment_method, total, order_date FROM Orders WHERE payment_method = ?");
+    query.addBindValue(paymentMethod);
+
+    if (!query.exec()) {
+        qDebug() << "Error filtering orders by payment method:" << query.lastError().text();
+        return ordersList;
+    }
+
+    while (query.next()) {
+        QVariantMap orderItem;
+        orderItem["order_id"] = query.value(0).toString();
+        orderItem["customer_id"] = query.value(1).toString();
+        orderItem["customer_name"] = query.value(2).toString();
+        orderItem["contact_no"] = query.value(3).toString();
+        orderItem["order_status"] = query.value(4).toString();
+        orderItem["quantity"] = query.value(5).toInt();
+        orderItem["payment_method"] = query.value(6).toString();
+        orderItem["total"] = query.value(7).toDouble();
+        orderItem["order_date"] = query.value(8).toString();
+
+        ordersList.append(orderItem);
+    }
+
+    return ordersList;
+}
+
+
+
